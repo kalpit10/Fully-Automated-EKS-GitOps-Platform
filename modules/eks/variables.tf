@@ -3,6 +3,11 @@ variable "cluster_name" {
   type        = string
 }
 
+variable "environment" {
+  description = "Environment name (e.g., dev, prod)"
+  type        = string
+}
+
 variable "subnet_ids" {
   description = "List of subnet IDs for the EKS cluster"
   type        = list(string)
@@ -119,5 +124,11 @@ variable "alb_name" {
 
 variable "backend_secret_id" {
   description = "Name or ARN of the Secrets Manager secret for backend environment variables"
+  type        = string
+}
+
+
+variable "node_sg_id" {
+  description = "Security Group ID for the EKS worker nodes"
   type        = string
 }

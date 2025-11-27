@@ -48,7 +48,6 @@ resource "aws_eks_node_group" "this" {
     min_size     = var.node_min_size
   }
 
-
   # t3.small is 2 vCPU and 2 GiB RAM, suitable for general-purpose workloads
   instance_types = ["t3.small"]
   capacity_type  = "ON_DEMAND"
@@ -87,4 +86,25 @@ resource "aws_iam_openid_connect_provider" "this" {
   client_id_list = ["sts.amazonaws.com"]
   # Thumbprint is meant to verify the OIDC provider's SSL certificate
   thumbprint_list = ["9e99a48a9960b14926bb7f3b02e22da0afd10f54"]
+}
+
+#############################
+# CLOUDWATCH DASHBOARD FOR EKS 
+# AddOn means additional features provided by AWS for EKS clusters
+# CloudWatch Observability AddOn provides enhanced monitoring and observability for EKS clusters
+# It will automatically install and configure CloudWatch Container Insights for the cluster
+#############################
+
+resource "aws_eks_addon" "cloudwatch_observability" {
+  cluster_name = aws_eks_cluster.this.name # change "this" to your real cluster resource name
+  addon_name   = "amazon-cloudwatch-observability"
+
+  # This setting ensures that if there are updates to the addon configuration,
+  # it will overwrite the existing configuration instead of failing.
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  tags = {
+    Name        = "cloudwatch-observability-${aws_eks_cluster.this.name}"
+    Environment = var.environment # if your eks module has environment variable
+  }
 }

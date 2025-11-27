@@ -36,6 +36,7 @@ module "ecr" {
 module "eks" {
   source       = "../../../modules/eks"
   cluster_name = "capstone-proshop-eks-prod"
+  environment  = var.env
 
   subnet_ids          = module.vpc.private_frontend_subnet_ids
   vpc_id              = module.vpc.vpc_id
@@ -64,8 +65,18 @@ module "eks" {
   node_desired_size = var.node_desired_size
   node_min_size     = var.node_min_size
   node_max_size     = var.node_max_size
+  node_sg_id        = module.vpc.nodes_sg_id
 }
 
+module "cloudwatch" {
+  source = "../../../modules/cloudwatch"
+
+  region       = var.region
+  cluster_name = module.eks.cluster_name
+  namespace    = "proshop"
+  env          = var.env
+  alb_name     = var.alb_name
+}
 
 module "secrets" {
   source = "../../../modules/secrets"

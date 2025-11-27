@@ -3,6 +3,11 @@ variable "env" {
   type        = string
 }
 
+variable "region" {
+  description = "AWS region to deploy resources in"
+  type        = string
+}
+
 variable "name_prefix" {
   description = "Prefix for resource names"
   type        = string

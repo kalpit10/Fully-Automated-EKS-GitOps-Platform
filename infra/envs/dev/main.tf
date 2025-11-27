@@ -43,6 +43,7 @@ module "ecr" {
 module "eks" {
   source       = "../../../modules/eks"
   cluster_name = "capstone-proshop-eks-dev"
+  environment  = var.env
 
   # We keep the EKS cluster in private frontend subnets because we don't want to expose the cluster to the internet directly.
   subnet_ids           = module.vpc.private_frontend_subnet_ids
@@ -71,6 +72,17 @@ module "eks" {
   node_desired_size = var.node_desired_size
   node_min_size     = var.node_min_size
   node_max_size     = var.node_max_size
+  node_sg_id        = module.vpc.nodes_sg_id
+}
+
+module "cloudwatch" {
+  source = "../../../modules/cloudwatch"
+
+  region       = var.region
+  cluster_name = module.eks.cluster_name
+  namespace    = "proshop"
+  env          = var.env
+  alb_name     = var.alb_name
 }
 
 module "secrets" {

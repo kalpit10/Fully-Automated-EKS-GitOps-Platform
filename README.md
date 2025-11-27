@@ -292,6 +292,7 @@ CAPSTONE-INFRA-TEAM4/
 │   ├── ecr/
 │   ├── eks/
 │   └── secrets/
+|   |── cloudwatch/
 │
 └── README.md
 

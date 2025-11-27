@@ -180,6 +180,7 @@ resource "aws_security_group" "nodes" {
     to_port     = 10250
     protocol    = "tcp"
     # Allow any instances associated with this same security group to talk to each other.
+    # This is needed for EKS worker nodes to communicate with the control plane.
     self = true
   }
 

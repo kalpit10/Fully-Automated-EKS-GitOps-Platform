@@ -48,8 +48,8 @@ resource "aws_eks_node_group" "this" {
     min_size     = var.node_min_size
   }
 
-  # t3.small is 2 vCPU and 2 GiB RAM, suitable for general-purpose workloads
-  instance_types = ["t3.small"]
+  # t3.medium is 2 vCPU and 4 GiB RAM, suitable for general-purpose workloads
+  instance_types = [var.node_instance_type] // Why square brackets? Because instance_types expects a list, even if we only provide one type. This allows for future expansion to multiple instance types if needed.
   capacity_type  = "ON_DEMAND"
 
   tags = {
@@ -77,15 +77,24 @@ data "aws_eks_cluster" "this" {
   name = aws_eks_cluster.this.name
 }
 
+
+# Fetches the TLS certificate from the OIDC issuer endpoint at plan time.
+# The thumbprint is the SHA1 fingerprint of the root CA in the certificate chain.
+# This replaces the previously hardcoded value and stays current automatically
+# if AWS rotates the certificate.
+data "tls_certificate" "eks_oidc" {
+  url = data.aws_eks_cluster.this.identity[0].oidc[0].issuer
+}
+
 # This block creates the OIDC provider for the EKS cluster
-# Who is the OIDC provider? It is a service that allows the EKS cluster to authenticate with IAM roles.
+# What is the OIDC provider? It is a service that allows the EKS cluster to authenticate with IAM roles.
 # This lets AWS trust our Kubernetes cluster as an identity source.
 # It uses the issuer URL from the EKS cluster data source so that the cluster can authenticate with IAM roles.
 resource "aws_iam_openid_connect_provider" "this" {
   url            = data.aws_eks_cluster.this.identity[0].oidc[0].issuer
   client_id_list = ["sts.amazonaws.com"]
-  # Thumbprint is meant to verify the OIDC provider's SSL certificate
-  thumbprint_list = ["9e99a48a9960b14926bb7f3b02e22da0afd10f54"]
+  # Dynamically fetched from the issuer endpoint - never hardcoded
+  thumbprint_list = [data.tls_certificate.eks_oidc.certificates[0].sha1_fingerprint]
 }
 
 #############################

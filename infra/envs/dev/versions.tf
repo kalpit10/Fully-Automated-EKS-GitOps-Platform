@@ -7,10 +7,10 @@ terraform {
     }
   }
   backend "s3" {
-    bucket         = "capstone-tfstate-452940498021-use1"
-    key            = "envs/dev/terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "capstone-tflock"
-    encrypt        = true
+    bucket       = "proshop-tfstate-395136123952-use1"
+    key          = "envs/dev/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true # SSE-S3 encryption
+    use_lockfile = true
   }
 }

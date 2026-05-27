@@ -6,7 +6,7 @@ resource "aws_vpc" "this" {
 
   tags = {
     Name    = "${var.name_prefix}-${var.env}-vpc"
-    Project = "Capstone"
+    Project = "proshop"
     Env     = var.env
     Owner   = "Team4"
   }
@@ -37,7 +37,7 @@ resource "aws_internet_gateway" "this" {
 
   tags = {
     Name    = "${var.name_prefix}-${var.env}-igw"
-    Project = "Capstone"
+    Project = "proshop"
     Env     = var.env
     Owner   = "Team4"
   }
@@ -78,8 +78,9 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-########## NAT GATEWAYS ##########
-# Elastic IP for NAT Gateway
+########## NAT GATEWAY ##########
+# Kept for MongoDB Atlas outbound traffic only.
+# All AWS service traffic is handled by VPC endpoints below.
 resource "aws_eip" "nat" {
   domain = "vpc" # must be set for VPC NAT
 
@@ -196,6 +197,166 @@ resource "aws_security_group" "nodes" {
 
   tags = {
     Name = "${var.name_prefix}-${var.env}-nodes-sg"
+    Env  = var.env
+  }
+}
+
+
+########## VPC ENDPOINTS SECURITY GROUP ##########
+resource "aws_security_group" "vpc_endpoints" {
+  name        = "${var.name_prefix}-${var.env}-vpce-sg"
+  description = "Allow HTTPS from nodes to VPC interface endpoints"
+  vpc_id      = aws_vpc.this.id
+
+  ingress {
+    description     = "HTTPS from node security group"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.nodes.id]
+  }
+
+  egress {
+    description = "Allow all outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-sg"
+    Env  = var.env
+  }
+}
+
+########## VPC ENDPOINTS ##########
+
+# --- S3 Gateway Endpoint (free) ---
+# ECR stores image layers in S3. Without this, every image pull
+# goes through the NAT Gateway and costs money per GB transferred.
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = aws_vpc.this.id
+  service_name      = "com.amazonaws.${var.region}.s3"
+  vpc_endpoint_type = "Gateway"
+
+  # Associate with both public and private route tables
+  # so all subnets can reach S3 without NAT.
+  route_table_ids = [
+    aws_route_table.public.id,
+    aws_route_table.private.id
+  ]
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-s3"
+    Env  = var.env
+  }
+}
+
+# --- ECR API Interface Endpoint ---
+# Handles Docker authentication and image manifest requests.
+resource "aws_vpc_endpoint" "ecr_api" {
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${var.region}.ecr.api"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  subnet_ids = [
+    for k, s in aws_subnet.this : s.id
+    if var.subnets[k].tier == "private-frontend"
+  ]
+
+  security_group_ids = [aws_security_group.vpc_endpoints.id]
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-ecr-api"
+    Env  = var.env
+  }
+}
+
+# --- ECR DKR Interface Endpoint ---
+# Handles the actual image layer downloads from ECR.
+resource "aws_vpc_endpoint" "ecr_dkr" {
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${var.region}.ecr.dkr"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  subnet_ids = [
+    for k, s in aws_subnet.this : s.id
+    if var.subnets[k].tier == "private-frontend"
+  ]
+
+  security_group_ids = [aws_security_group.vpc_endpoints.id]
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-ecr-dkr"
+    Env  = var.env
+  }
+}
+
+# --- Secrets Manager Interface Endpoint ---
+# Allows pods to read secrets without going through NAT Gateway.
+resource "aws_vpc_endpoint" "secretsmanager" {
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${var.region}.secretsmanager"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  # Only place endpoints in private-frontend subnets since backend subnets don't need them.
+  subnet_ids = [
+    for k, s in aws_subnet.this : s.id
+    if var.subnets[k].tier == "private-frontend"
+  ]
+
+  security_group_ids = [aws_security_group.vpc_endpoints.id]
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-secretsmanager"
+    Env  = var.env
+  }
+}
+
+# --- STS Interface Endpoint ---
+# Required for IRSA — pods exchange their Kubernetes token for
+# temporary AWS credentials via STS AssumeRoleWithWebIdentity.
+resource "aws_vpc_endpoint" "sts" {
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${var.region}.sts"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  subnet_ids = [
+    for k, s in aws_subnet.this : s.id
+    if var.subnets[k].tier == "private-frontend"
+  ]
+
+  security_group_ids = [aws_security_group.vpc_endpoints.id]
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-sts"
+    Env  = var.env
+  }
+}
+
+# --- CloudWatch Logs Interface Endpoint ---
+# Allows the CloudWatch agent on nodes to ship pod logs
+# directly to CloudWatch without crossing the NAT Gateway.
+resource "aws_vpc_endpoint" "cloudwatch_logs" {
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${var.region}.logs"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  subnet_ids = [
+    for k, s in aws_subnet.this : s.id
+    if var.subnets[k].tier == "private-frontend"
+  ]
+
+  security_group_ids = [aws_security_group.vpc_endpoints.id]
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-cloudwatch-logs"
     Env  = var.env
   }
 }

@@ -21,3 +21,8 @@ variable "name_prefix" {
   description = "Prefix for naming resources"
   type        = string
 }
+
+variable "region" {
+  description = "AWS region - used for VPC endpoint service names"
+  type        = string
+}

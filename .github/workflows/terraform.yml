@@ -1,51 +1,164 @@
 name: terraform-ci
 
 on:
-  pull_request: # run on PRs
+  pull_request:
+    paths:
+      - "infra/**"
+      - "modules/**"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches:
+      - main
     paths:
       - "infra/**"
       - "modules/**"
       - ".github/workflows/terraform.yml"
 
+permissions:
+  id-token: write # required to request the OIDC JWT token
+  contents: read # required for actions/checkout
+
 jobs:
   tf-dev-plan:
-    name: Dev plan
-    runs-on: ubuntu-latest # GitHub-hosted runner
+    name: Dev Plan
+    runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: infra/envs/dev # run Terraform in dev
+        working-directory: infra/envs/dev
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-        # Pulls your repo into the runner.
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        # pin: actions/checkout v4.2.2
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269ef032
+        # pin: hashicorp/setup-terraform v3.1.2
         with:
           terraform_version: 1.12.2
-        # Pins the CLI version so CI matches your laptops.
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        # pin: aws-actions/configure-aws-credentials v4.0.2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ secrets.AWS_REGION }}
-        # Exposes creds for the next steps. Needed because your backend is remote.
+          # GitHub exchanges the OIDC token for temporary AWS credentials
+          # valid for this job only. No static keys anywhere.
 
-      - name: Terraform init
+      - name: Terraform Init
         run: terraform init -input=false
-        # Connects to S3 backend and DDB lock with the CI user.
 
-      - name: Terraform fmt
+      - name: Terraform Format Check
         run: terraform fmt -check
-        # Fails PR if formatting is off.
 
-      - name: Terraform validate
+      - name: Terraform Validate
         run: terraform validate
-        # Static validation of .tf files.
 
-      - name: Terraform plan
-        run: terraform plan -input=false -no-color
-        # Reads state, calculates changes. Does not apply.
+      - name: Terraform Plan
+        run: terraform plan -input=false -no-color -var-file="dev.tfvars"
+
+  tf-prod-plan:
+    name: Prod Plan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/envs/prod
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        # pin: actions/checkout v4.2.2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269ef032
+        # pin: hashicorp/setup-terraform v3.1.2
+        with:
+          terraform_version: 1.12.2
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        # pin: aws-actions/configure-aws-credentials v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -input=false -no-color -var-file="prod.tfvars"
+
+  tf-dev-apply:
+    name: Dev Apply
+    runs-on: ubuntu-latest
+    needs: tf-dev-plan
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    defaults:
+      run:
+        working-directory: infra/envs/dev
+    environment: dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        # pin: actions/checkout v4.2.2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269ef032
+        # pin: hashicorp/setup-terraform v3.1.2
+        with:
+          terraform_version: 1.12.2
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        # pin: aws-actions/configure-aws-credentials v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -input=false -var-file="dev.tfvars"
+
+  tf-prod-apply:
+    name: Prod Apply
+    runs-on: ubuntu-latest
+    needs: tf-prod-plan
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    defaults:
+      run:
+        working-directory: infra/envs/prod
+    environment: prod
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        # pin: actions/checkout v4.2.2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269ef032
+        # pin: hashicorp/setup-terraform v3.1.2
+        with:
+          terraform_version: 1.12.2
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        # pin: aws-actions/configure-aws-credentials v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -input=false -var-file="prod.tfvars"

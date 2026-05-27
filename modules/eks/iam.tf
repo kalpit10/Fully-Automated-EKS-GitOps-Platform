@@ -170,14 +170,14 @@ resource "aws_iam_role_policy_attachment" "alb_controller_attach" {
 #     - Defines WHO can assume the role and under what condition.
 #     - The "assume_role_policy" allows assumption only by the OIDC provider
 #       when the token subject matches the Kubernetes service account:
-#       system:serviceaccount:default:backend-sa.
+#       system:serviceaccount:proshop:backend-sa.
 
 # 4️⃣  IAM Role Policy Attachment (aws_iam_role_policy_attachment)
 #     - Connects the above policy to the role.
 #     - Without this, the role exists but has no permissions.
 
 # 5️⃣  Kubernetes Service Account (backend-sa)
-#     - Created inside the EKS cluster (namespace: default).
+#     - Created inside the EKS cluster (namespace: proshop).
 #     - Annotated with the IAM Role ARN so pods using it automatically get
 #       temporary credentials for AWS API access.
 
@@ -230,7 +230,7 @@ data "aws_iam_policy_document" "backend_irsa_assume" {
       # The :sub part means the subject claim in the token, which actually means the service account can assume this role only.
       # So in basic terms, this condition ensures that only the service account named backend-sa in the default namespace can assume this role.
       variable = "${replace(aws_iam_openid_connect_provider.this.url, "https://", "")}:sub"
-      values   = ["system:serviceaccount:default:backend-sa"]
+      values   = ["system:serviceaccount:proshop:backend-sa"]
     }
   }
 }
@@ -239,7 +239,7 @@ data "aws_iam_policy_document" "backend_irsa_assume" {
 resource "aws_iam_role" "backend_irsa_role" {
   name = "proshop-backend-irsa-role"
   # Here in simple terms, we are defining who can assume this role.
-  # This role can be assumed by the backend service account in the default namespace.
+  # This role can be assumed by the backend service account in the proshop namespace.
   assume_role_policy = data.aws_iam_policy_document.backend_irsa_assume.json
 }
 

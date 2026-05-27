@@ -38,3 +38,8 @@ output "nodes_sg_id" {
   description = "Node security group ID"
   value       = aws_security_group.nodes.id
 }
+
+output "vpc_endpoints_sg_id" {
+  description = "Security group ID for VPC interface endpoints"
+  value       = aws_security_group.vpc_endpoints.id
+}

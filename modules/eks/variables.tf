@@ -56,3 +56,8 @@ variable "node_instance_type" {
   type        = string
   default     = "t3.medium"
 }
+
+variable "cluster_admin_arn" {
+  description = "IAM ARN of the entity that administers the cluster — gets Kubernetes cluster-admin access"
+  type        = string
+}

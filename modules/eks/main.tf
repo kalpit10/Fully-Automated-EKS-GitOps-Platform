@@ -14,6 +14,13 @@ resource "aws_eks_cluster" "this" {
     endpoint_private_access = true # keep private access for nodes
   }
 
+  # Explicitly set authentication mode to API
+  # and grant the cluster creator admin permissions automatically
+  access_config {
+    authentication_mode                         = "API_AND_CONFIG_MAP"
+    bootstrap_cluster_creator_admin_permissions = true
+  }
+
   # This is for maintaining logs for the EKS cluster
   # basic control plane logs for troubleshooting
   enabled_cluster_log_types = [
@@ -28,6 +35,27 @@ resource "aws_eks_cluster" "this" {
   }
 }
 
+# Grant the IAM entity that runs Terraform admin access to the cluster.
+# This must be created before the node group so nodes can register.
+resource "aws_eks_access_entry" "cluster_admin" {
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = var.cluster_admin_arn
+  type          = "STANDARD"
+
+  depends_on = [aws_eks_cluster.this]
+}
+
+resource "aws_eks_access_policy_association" "cluster_admin" {
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = var.cluster_admin_arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.cluster_admin]
+}
 
 #############################
 # MANAGED NODE GROUP
@@ -56,9 +84,12 @@ resource "aws_eks_node_group" "this" {
     Name = "${var.cluster_name}-ng"
   }
 
-  # Ensure the node group is created only after the EKS cluster is fully set up
+  # Node group must wait for access entry to exist
+  # so nodes can register with the control plane
   depends_on = [
-    aws_eks_cluster.this
+    aws_eks_cluster.this,
+    aws_eks_access_entry.cluster_admin,
+    aws_eks_access_policy_association.cluster_admin
   ]
 }
 

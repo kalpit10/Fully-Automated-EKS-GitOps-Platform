@@ -45,6 +45,7 @@ module "eks" {
   node_min_size     = var.node_min_size
   node_max_size     = var.node_max_size
   node_sg_id        = module.vpc.nodes_sg_id
+  cluster_admin_arn = var.cluster_admin_arn
 }
 
 module "cloudwatch" {

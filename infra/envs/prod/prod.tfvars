@@ -47,3 +47,5 @@ node_instance_type = "t3.large"
 alb_name = "proshop-alb-prod"
 
 backend_secret_id = "proshop/backend-prod"
+
+cluster_admin_arn = "arn:aws:iam::395136123952:user/terraform-user"

@@ -56,3 +56,8 @@ variable "node_instance_type" {
   description = "EC2 instance type for worker nodes"
   type        = string
 }
+
+variable "cluster_admin_arn" {
+  description = "IAM ARN of the cluster administrator"
+  type        = string
+}

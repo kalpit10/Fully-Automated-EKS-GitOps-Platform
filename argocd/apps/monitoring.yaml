@@ -1,0 +1,33 @@
+# We need to install the kube-prometheus-stack in order to monitor our Kubernetes cluster and applications. The kube-prometheus-stack is a collection of Kubernetes manifests, Grafana dashboards, and Prometheus rules that provide a complete monitoring solution for Kubernetes clusters. It includes Prometheus for metrics collection, Alertmanager for alerting, and Grafana for visualization. By installing the kube-prometheus-stack, we can gain insights into the performance and health of our cluster and applications, and we can also set up alerts to notify us of any issues that may arise.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: "70.4.2"
+    - repoURL: https://github.com/kalpit10/cloud-native-ecommerce-platform.git
+      targetRevision: phase1-test
+      ref: values
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: "70.4.2"
+    helm:
+      valueFiles:
+        - $values/gitops/monitoring/values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

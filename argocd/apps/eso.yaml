@@ -1,0 +1,33 @@
+# ESO is needed to manage secrets in the cluster. It will be used to sync secrets from external secret stores like AWS Secrets Manager, HashiCorp Vault, etc. to Kubernetes secrets. This way we can keep our secrets in a secure and centralized location and still have them available in the cluster when needed.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: eso
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://charts.external-secrets.io
+      chart: external-secrets
+      targetRevision: "0.14.4"
+    - repoURL: https://github.com/kalpit10/cloud-native-ecommerce-platform.git
+      targetRevision: phase1-test
+      ref: values
+  source:
+    repoURL: https://charts.external-secrets.io
+    chart: external-secrets
+    targetRevision: "0.14.4"
+    helm:
+      valueFiles:
+        - $values/gitops/eso/values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-secrets
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

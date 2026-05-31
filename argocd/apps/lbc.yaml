@@ -1,0 +1,33 @@
+# We need to install the AWS Load Balancer Controller in order to use the AWS Application Load Balancer (ALB) with our Kubernetes services. The AWS Load Balancer Controller is a Kubernetes controller that manages AWS Elastic Load Balancers for a Kubernetes cluster. It allows us to create and manage load balancers for our services, and it also provides support for features like SSL termination and path-based routing.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aws-load-balancer-controller
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://aws.github.io/eks-charts
+      chart: aws-load-balancer-controller
+      targetRevision: "1.11.0"
+    - repoURL: https://github.com/kalpit10/cloud-native-ecommerce-platform.git
+      targetRevision: phase1-test
+      ref: values
+  source:
+    repoURL: https://aws.github.io/eks-charts
+    chart: aws-load-balancer-controller
+    targetRevision: "1.11.0"
+    helm:
+      valueFiles:
+        - $values/gitops/lbc/values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

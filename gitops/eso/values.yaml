@@ -1,0 +1,25 @@
+# ESO is the External Secrets Operator. This is what syncs our secrets from AWS Secrets Manager into Kubernetes.
+
+installCRDs: true #
+
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: "external-secrets-sa"
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::395136123952:role/proshop-backend-irsa-role"
+
+webhook:
+  create: true # WebHook is used for validating the ExternalSecret resources.
+
+certController:
+  create: true # CertController is used to create the TLS certificates for the WebHook.
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi

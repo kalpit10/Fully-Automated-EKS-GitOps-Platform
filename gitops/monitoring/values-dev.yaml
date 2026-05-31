@@ -1,0 +1,65 @@
+fullnameOverride: "kube-prometheus-stack"
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    replicas: 1
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 5Gi
+
+prometheus:
+  prometheusSpec:
+    replicas: 1
+    retention: 3d
+    retentionSize: "8GB"
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+grafana:
+  enabled: true
+  replicas: 1
+  admin:
+    existingSecret: "backend-secret"
+    userKey: grafana_username
+    passwordKey: grafana_password
+  service:
+    type: ClusterIP
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+nodeExporter: # node exporter is used to collect node-level metrics such as CPU, memory, disk, and network usage. It runs as a DaemonSet on each node in the cluster.
+  enabled: true
+
+kubeStateMetrics: # kube-state-metrics is used to collect Kubernetes API object metrics such as deployments, pods, and services. It runs as a Deployment in the cluster.
+  enabled: true
+
+defaultRules: # default alerting rules for Kubernetes components such as node, pod, and deployment. It is enabled by default, but can be disabled if we want to create our own custom rules.
+  create: true

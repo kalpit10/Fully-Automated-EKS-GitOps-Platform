@@ -367,3 +367,26 @@ resource "aws_vpc_endpoint" "cloudwatch_logs" {
     Env  = var.env
   }
 }
+
+# --- EKS Interface Endpoint ---
+# Required for nodes to reach the EKS API server privately.
+# Without this, node registration traffic goes through NAT Gateway
+# and can fail if there are any connectivity issues.
+resource "aws_vpc_endpoint" "eks" {
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${var.region}.eks"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  subnet_ids = [
+    for k, s in aws_subnet.this : s.id
+    if var.subnets[k].tier == "private-frontend"
+  ]
+
+  security_group_ids = [aws_security_group.vpc_endpoints.id]
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-eks"
+    Env  = var.env
+  }
+}

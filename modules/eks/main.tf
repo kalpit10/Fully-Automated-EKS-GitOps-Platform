@@ -37,25 +37,25 @@ resource "aws_eks_cluster" "this" {
 
 # Grant the IAM entity that runs Terraform admin access to the cluster.
 # This must be created before the node group so nodes can register.
-resource "aws_eks_access_entry" "cluster_admin" {
-  cluster_name  = aws_eks_cluster.this.name
-  principal_arn = var.cluster_admin_arn
-  type          = "STANDARD"
+# resource "aws_eks_access_entry" "cluster_admin" {
+#   cluster_name  = aws_eks_cluster.this.name
+#   principal_arn = var.cluster_admin_arn
+#   type          = "STANDARD"
 
-  depends_on = [aws_eks_cluster.this]
-}
+#   depends_on = [aws_eks_cluster.this]
+# }
 
-resource "aws_eks_access_policy_association" "cluster_admin" {
-  cluster_name  = aws_eks_cluster.this.name
-  principal_arn = var.cluster_admin_arn
-  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+# resource "aws_eks_access_policy_association" "cluster_admin" {
+#   cluster_name  = aws_eks_cluster.this.name
+#   principal_arn = var.cluster_admin_arn
+#   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
 
-  access_scope {
-    type = "cluster"
-  }
+#   access_scope {
+#     type = "cluster"
+#   }
 
-  depends_on = [aws_eks_access_entry.cluster_admin]
-}
+#   depends_on = [aws_eks_access_entry.cluster_admin]
+# }
 
 #############################
 # MANAGED NODE GROUP
@@ -65,32 +65,49 @@ resource "aws_eks_access_policy_association" "cluster_admin" {
 resource "aws_eks_node_group" "this" {
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "${var.cluster_name}-node-group"
-  # IAM role allowing EC2 nodes to join and pull images from ECR
-  node_role_arn = aws_iam_role.eks_node_role.arn
-  subnet_ids    = var.subnet_ids
+  node_role_arn   = aws_iam_role.eks_node_role.arn
+  subnet_ids      = var.subnet_ids
 
-  # Starts 2 node, scales to 3 if needed
   scaling_config {
     desired_size = var.node_desired_size
     max_size     = var.node_max_size
     min_size     = var.node_min_size
   }
 
-  # t3.medium is 2 vCPU and 4 GiB RAM, suitable for general-purpose workloads
-  instance_types = [var.node_instance_type] // Why square brackets? Because instance_types expects a list, even if we only provide one type. This allows for future expansion to multiple instance types if needed.
+  instance_types = [var.node_instance_type]
   capacity_type  = "ON_DEMAND"
+
+  # Attach both the custom node security group AND the cluster security group
+  # The cluster security group enables control plane to node communication
+  # Without it nodes cannot register with the Kubernetes API server
+  launch_template {
+    name    = aws_launch_template.nodes.name
+    version = aws_launch_template.nodes.latest_version
+  }
 
   tags = {
     Name = "${var.cluster_name}-ng"
   }
 
-  # Node group must wait for access entry to exist
-  # so nodes can register with the control plane
   depends_on = [
-    aws_eks_cluster.this,
-    aws_eks_access_entry.cluster_admin,
-    aws_eks_access_policy_association.cluster_admin
+    aws_eks_cluster.this
   ]
+}
+
+resource "aws_launch_template" "nodes" {
+  name_prefix = "${var.cluster_name}-node-"
+
+  vpc_security_group_ids = [
+    var.node_sg_id,
+    aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
+  ]
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "${var.cluster_name}-node"
+    }
+  }
 }
 
 
@@ -135,16 +152,16 @@ resource "aws_iam_openid_connect_provider" "this" {
 # It will automatically install and configure CloudWatch Container Insights for the cluster
 #############################
 
-resource "aws_eks_addon" "cloudwatch_observability" {
-  cluster_name = aws_eks_cluster.this.name # change "this" to your real cluster resource name
-  addon_name   = "amazon-cloudwatch-observability"
+# resource "aws_eks_addon" "cloudwatch_observability" {
+#   cluster_name = aws_eks_cluster.this.name # change "this" to your real cluster resource name
+#   addon_name   = "amazon-cloudwatch-observability"
 
-  # This setting ensures that if there are updates to the addon configuration,
-  # it will overwrite the existing configuration instead of failing.
-  resolve_conflicts_on_update = "OVERWRITE"
+#   # This setting ensures that if there are updates to the addon configuration,
+#   # it will overwrite the existing configuration instead of failing.
+#   resolve_conflicts_on_update = "OVERWRITE"
 
-  tags = {
-    Name        = "cloudwatch-observability-${aws_eks_cluster.this.name}"
-    Environment = var.environment # if your eks module has environment variable
-  }
-}
+#   tags = {
+#     Name        = "cloudwatch-observability-${aws_eks_cluster.this.name}"
+#     Environment = var.environment # if your eks module has environment variable
+#   }
+# }

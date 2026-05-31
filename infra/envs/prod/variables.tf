@@ -57,7 +57,7 @@ variable "node_instance_type" {
   type        = string
 }
 
-variable "cluster_admin_arn" {
-  description = "IAM ARN of the cluster administrator"
-  type        = string
-}
+# variable "cluster_admin_arn" {
+#   description = "IAM ARN of the cluster administrator"
+#   type        = string
+# }

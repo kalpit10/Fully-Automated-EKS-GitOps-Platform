@@ -48,4 +48,4 @@ alb_name = "proshop-alb-dev"
 
 backend_secret_id = "proshop/backend"
 
-cluster_admin_arn = "arn:aws:iam::395136123952:user/terraform-user"
+# cluster_admin_arn = "arn:aws:iam::395136123952:user/terraform-user"

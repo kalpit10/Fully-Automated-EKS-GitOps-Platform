@@ -43,3 +43,8 @@ output "vpc_endpoints_sg_id" {
   description = "Security group ID for VPC interface endpoints"
   value       = aws_security_group.vpc_endpoints.id
 }
+
+output "eks_endpoint_id" {
+  description = "VPC endpoint ID for EKS"
+  value       = aws_vpc_endpoint.eks.id
+}

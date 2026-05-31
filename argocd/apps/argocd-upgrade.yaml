@@ -13,16 +13,13 @@ spec:
     - repoURL: https://argoproj.github.io/argo-helm
       chart: argo-cd
       targetRevision: "7.8.23"
+      helm:
+        valueFiles:
+          - $values/gitops/argocd/values.yaml
     - repoURL: https://github.com/kalpit10/cloud-native-ecommerce-platform.git
       targetRevision: phase1-test
       ref: values
-  source:
-    repoURL: https://argoproj.github.io/argo-helm
-    chart: argo-cd
-    targetRevision: "7.8.23"
-    helm:
-      valueFiles:
-        - $values/gitops/argocd/values.yaml
+
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

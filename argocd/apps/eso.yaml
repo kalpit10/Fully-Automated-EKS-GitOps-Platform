@@ -12,16 +12,13 @@ spec:
     - repoURL: https://charts.external-secrets.io
       chart: external-secrets
       targetRevision: "0.14.4"
+      helm:
+        valueFiles:
+          - $values/gitops/eso/values.yaml
     - repoURL: https://github.com/kalpit10/cloud-native-ecommerce-platform.git
       targetRevision: phase1-test
       ref: values
-  source:
-    repoURL: https://charts.external-secrets.io
-    chart: external-secrets
-    targetRevision: "0.14.4"
-    helm:
-      valueFiles:
-        - $values/gitops/eso/values.yaml
+
   destination:
     server: https://kubernetes.default.svc
     namespace: external-secrets

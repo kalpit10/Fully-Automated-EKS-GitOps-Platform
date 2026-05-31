@@ -12,16 +12,12 @@ spec:
     - repoURL: https://aws.github.io/eks-charts
       chart: aws-load-balancer-controller
       targetRevision: "1.11.0"
+      helm:
+        valueFiles:
+          - $values/gitops/lbc/values.yaml
     - repoURL: https://github.com/kalpit10/cloud-native-ecommerce-platform.git
       targetRevision: phase1-test
       ref: values
-  source:
-    repoURL: https://aws.github.io/eks-charts
-    chart: aws-load-balancer-controller
-    targetRevision: "1.11.0"
-    helm:
-      valueFiles:
-        - $values/gitops/lbc/values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system

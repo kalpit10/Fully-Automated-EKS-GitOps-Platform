@@ -27,4 +27,4 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-      - serverSideApply=true # This tells ArgoCD to use the Kubernetes API server to apply resources instead of storing everything in annotations, which bypasses the size limit entirely.D
+      - ServerSideApply=true # This tells ArgoCD to use the Kubernetes API server to apply resources instead of storing everything in annotations, which bypasses the size limit entirely.D

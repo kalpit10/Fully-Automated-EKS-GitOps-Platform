@@ -81,6 +81,7 @@ data "aws_iam_policy_document" "alb_controller" {
       "acm:ListCertificates",
       "acm:GetCertificate",
       "ec2:AuthorizeSecurityGroupIngress",
+      "ec2:RevokeSecurityGroupIngress", # Required for LBC to clean up stale SG rules
       "ec2:CreateSecurityGroup",
       "ec2:CreateTags",
       "ec2:DeleteTags",

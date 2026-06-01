@@ -12,7 +12,7 @@ spec:
   source:
     repoURL: https://github.com/kalpit10/cloud-native-ecommerce-platform.git
     targetRevision: phase1-test
-    path: gitops/eso/manifests
+    path: gitops/eso/manifests/dev
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

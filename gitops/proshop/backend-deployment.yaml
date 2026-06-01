@@ -34,14 +34,14 @@ spec:
               memory: 512Mi # prod: 1Gi
           readinessProbe: # readiness means "ready to receive traffic", liveness means "alive and healthy". Separate probes allow for more graceful startup and better failure recovery.
             httpGet:
-              path: /api/config/paypal
+              path: /api/products
               port: 5000
             initialDelaySeconds: 15 # 15 means "wait 15 seconds before starting to probe". This allows the app to start up without immediately being marked as unhealthy.
             periodSeconds: 10 # 10 here means "probe every 10 seconds". This is a common interval that balances timely detection of issues with avoiding excessive probing.
             failureThreshold: 3 # 3 means "after 3 consecutive failures, mark as unhealthy". This allows for transient issues without immediately marking the app as unhealthy.
           livenessProbe:
             httpGet:
-              path: /api/config/paypal # This is a simple endpoint that doesn't require authentication, making it ideal for health checks. It verifies that the app can serve requests without the overhead of database connections or other dependencies.
+              path: /api/products # This is a simple endpoint that doesn't require authentication, making it ideal for health checks. It verifies that the app can serve requests without the overhead of database connections or other dependencies.
               port: 5000
             initialDelaySeconds: 30
             periodSeconds: 20

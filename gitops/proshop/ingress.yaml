@@ -25,7 +25,7 @@ metadata:
     # alb.ingress.kubernetes.io/load-balancer-attributes: deletion_protection.enabled=true
 
     # Health check path for backend target group
-    alb.ingress.kubernetes.io/healthcheck-path: /api/config/paypal
+    alb.ingress.kubernetes.io/healthcheck-path: /api/products
     alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
     alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
     alb.ingress.kubernetes.io/healthy-threshold-count: "2"

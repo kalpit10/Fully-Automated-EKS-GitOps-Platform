@@ -1,0 +1,52 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: proshop-ingress
+  namespace: proshop
+  labels:
+    app.kubernetes.io/part-of: proshop
+  annotations:
+    # Instructs LBC to create an ALB (not NLB)
+    kubernetes.io/ingress.class: alb
+
+    # Internet-facing ALB in public subnets — accessible from the internet
+    alb.ingress.kubernetes.io/scheme: internet-facing
+
+    # Register pod IPs directly in ALB target groups — required for EKS VPC CNI
+    alb.ingress.kubernetes.io/target-type: ip
+
+    # Listen on port 80
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+
+    # Use the proshop namespace for target group binding
+    alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=false
+
+    # Enable deletion protection on ALB — remove annotation to allow LBC to delete ALB
+    # alb.ingress.kubernetes.io/load-balancer-attributes: deletion_protection.enabled=true
+
+    # Health check path for backend target group
+    alb.ingress.kubernetes.io/healthcheck-path: /api/config/paypal
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+spec:
+  rules:
+    - http:
+        paths:
+          # /api/ must be first — PathPrefix '/' matches everything,
+          # so backend rule must be evaluated before the catch-all frontend rule
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-service
+                port:
+                  number: 5000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-service
+                port:
+                  number: 80

@@ -8,6 +8,16 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  # This tells us to ignore differences in the status field of the Prometheus and Alertmanager resources, which can help prevent unnecessary syncs and reduce the load on the Kubernetes API server.
+  ignoreDifferences:
+    - group: monitoring.coreos.com
+      kind: Prometheus
+      jsonPointers:
+        - /status
+    - group: monitoring.coreos.com
+      kind: Alertmanager
+      jsonPointers:
+        - /status
   sources:
     - repoURL: https://prometheus-community.github.io/helm-charts
       chart: kube-prometheus-stack
@@ -27,4 +37,5 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-      - ServerSideApply=true # This tells ArgoCD to use the Kubernetes API server to apply resources instead of storing everything in annotations, which bypasses the size limit entirely.D
+      - ServerSideApply=true # This tells ArgoCD to use the Kubernetes API server to apply resources instead of storing everything in annotations, which bypasses the size limit entirely.
+      - RespectIgnoreDifferences=true # This tells ArgoCD to ignore differences between the live state and the desired state when it comes to resources that have been applied using Server-Side Apply, which can help prevent unnecessary syncs and reduce the load on the Kubernetes API server.

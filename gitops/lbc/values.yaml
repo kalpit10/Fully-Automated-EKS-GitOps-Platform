@@ -8,8 +8,6 @@ serviceAccount:
 
 region: us-east-1
 
-vpcId: "vpc-0e28eaece2f8e1f51"
-
 resources:
   requests:
     cpu: 100m

@@ -94,6 +94,8 @@ resource "aws_eks_node_group" "this" {
   ]
 }
 
+# Launch template is used to specify additional configuration for the EC2 instances that will be launched as worker nodes in the EKS cluster.
+# We are using it to attach both the custom node security group and the cluster security group to ensure proper communication between the control plane and the nodes.
 resource "aws_launch_template" "nodes" {
   name_prefix = "${var.cluster_name}-node-"
 
@@ -107,6 +109,12 @@ resource "aws_launch_template" "nodes" {
     tags = {
       Name = "${var.cluster_name}-node"
     }
+  }
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
   }
 }
 

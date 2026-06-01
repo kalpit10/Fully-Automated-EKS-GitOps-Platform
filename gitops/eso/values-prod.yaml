@@ -1,0 +1,22 @@
+installCRDs: true
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: "external-secrets-sa"
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::395136123952:role/proshop-eks-prod-eso-role"
+
+webhook:
+  create: true
+
+certController:
+  create: true
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi

@@ -9,6 +9,11 @@ resource "aws_vpc" "this" {
     Project = "proshop"
     Env     = var.env
     Owner   = "Team4"
+    # Required for LBC VPC auto-discovery.
+    # The LBC calls DescribeVPCs with this filter to find its VPC when
+    # vpcId is not set in the Helm values. Without this tag, the filter
+    # returns empty and the controller cannot start.
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   }
 }
 
@@ -20,14 +25,27 @@ resource "aws_subnet" "this" {
   cidr_block        = each.value.cidr
   availability_zone = each.value.az
 
-  # Only public subnets get public IPs on launch
   map_public_ip_on_launch = each.value.tier == "public" ? true : false
 
-  tags = {
-    Name = "${var.name_prefix}-${var.env}-${each.key}"
-    Tier = each.value.tier
-    Env  = var.env
-  }
+  tags = merge(
+    {
+      Name = "${var.name_prefix}-${var.env}-${each.key}"
+      Tier = each.value.tier
+      Env  = var.env
+    },
+    # Public subnets: tag for external (internet-facing) ALB placement.
+    # LBC reads this tag to determine which subnets to use for public ALBs.
+    each.value.tier == "public" ? {
+      "kubernetes.io/role/elb"                    = "1" # 1 means "true" for Kubernetes tags. This is required for external ALBs to work.
+      "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    } : {},
+    # Private-frontend subnets: tag for internal ALB placement.
+    # Also required for EKS node group subnet discovery.
+    each.value.tier == "private-frontend" ? {
+      "kubernetes.io/role/internal-elb"           = "1" # 1 means "true" for Kubernetes tags. This is required for internal ALBs to work.
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+    } : {}
+  )
 }
 
 

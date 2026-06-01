@@ -165,3 +165,26 @@ resource "aws_iam_openid_connect_provider" "this" {
 #     Environment = var.environment # if your eks module has environment variable
 #   }
 # }
+
+
+# ------ EBS CSI DRIVER ADDON ------
+resource "aws_eks_addon" "ebs_csi_driver" {
+  cluster_name             = aws_eks_cluster.this.name
+  addon_name               = "aws-ebs-csi-driver"
+  service_account_role_arn = aws_iam_role.ebs_csi_role.arn
+
+  # OVERWRITE ensures that if a previous manual installation of the driver
+  # exists (e.g. from kubectl apply), Terraform takes ownership without failing.
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  tags = {
+    Name        = "ebs-csi-driver-${var.cluster_name}"
+    Environment = var.environment
+  }
+
+  depends_on = [
+    aws_eks_node_group.this,
+    aws_iam_role_policy_attachment.ebs_csi_policy
+  ]
+}

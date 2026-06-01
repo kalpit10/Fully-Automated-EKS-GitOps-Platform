@@ -1,0 +1,26 @@
+# ESO is the External Secrets Operator. This is what syncs our secrets from AWS Secrets Manager into Kubernetes.
+
+# External Secrets are Kubernetes resources that represent secrets stored in external secret management systems, such as AWS Secrets Manager. The External Secrets Operator (ESO) is a Kubernetes operator that manages these External Secrets and ensures that the secrets are kept up to date in the cluster.
+installCRDs: true # CRD's are Custom Resource Definitions. They define the schema for the ExternalSecret resources that we create in our cluster.
+
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: "external-secrets-sa"
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::395136123952:role/proshop-eks-dev-eso-role"
+
+webhook:
+  create: true # WebHook is used for validating the ExternalSecret resources.
+
+certController:
+  create: true # CertController is used to create the TLS certificates for the WebHook.
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi

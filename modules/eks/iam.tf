@@ -250,3 +250,79 @@ resource "aws_iam_role_policy_attachment" "backend_secrets_read_attach" {
   policy_arn = aws_iam_policy.backend_secrets_read.arn
 }
 
+# ------- EBS CSI DRIVER POLICY -------
+# This policy allows the EBS CSI driver to manage EBS volumes for the EKS cluster
+
+resource "aws_iam_role" "ebs_csi_role" {
+  name = "${var.cluster_name}-ebs-csi-role"
+
+  # Trust policy: only the EBS CSI controller ServiceAccount in kube-system
+  # can assume this role via OIDC WebIdentity.
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.this.arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "${replace(data.aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+          }
+        }
+      }
+    ]
+  })
+}
+
+# Attach the AWS-managed EBS CSI policy.
+# arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy grants
+# the exact EC2 and KMS permissions the driver needs to manage EBS volumes.
+resource "aws_iam_role_policy_attachment" "ebs_csi_policy" {
+  role       = aws_iam_role.ebs_csi_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
+
+# ------- EXTERNAL SECRETS OPERATOR (ESO) POLICY -------
+# This policy allows the ESO to read secrets from AWS Secrets Manager.
+resource "aws_iam_policy" "eso_secrets_policy" {
+  name = "${var.cluster_name}-eso-secrets-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:ListSecrets"]
+        Resource = "arn:aws:secretsmanager:us-east-1:${data.aws_caller_identity.current.account_id}:secret:proshop/*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role" "eso_role" {
+  name = "${var.cluster_name}-eso-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Federated = aws_iam_openid_connect_provider.this.arn
+      }
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${replace(data.aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:external-secrets:external-secrets-sa"
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "eso_policy_attach" {
+  role       = aws_iam_role.eso_role.name
+  policy_arn = aws_iam_policy.eso_secrets_policy.arn
+}

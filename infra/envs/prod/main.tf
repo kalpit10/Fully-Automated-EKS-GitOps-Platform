@@ -1,10 +1,11 @@
 module "vpc" {
-  source      = "../../../modules/vpc"
-  env         = var.env
-  name_prefix = var.name_prefix
-  vpc_cidr    = var.vpc_cidr
-  subnets     = var.subnets
-  region      = var.region
+  source       = "../../../modules/vpc"
+  env          = var.env
+  name_prefix  = var.name_prefix
+  vpc_cidr     = var.vpc_cidr
+  subnets      = var.subnets
+  region       = var.region
+  cluster_name = "proshop-eks-prod" # feeds the kubernetes.io/cluster/* tags
 }
 
 

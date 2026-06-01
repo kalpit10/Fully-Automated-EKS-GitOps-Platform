@@ -1,0 +1,24 @@
+# This file defines the ArgoCD application for the External Secrets Operator (ESO) manifests. The ESO is responsible for syncing secrets from external secret stores like AWS Secrets Manager into Kubernetes secrets.
+# This allows us to keep our secrets in a secure and centralized location while still making them available in the cluster when needed. The application is set to automatically sync and prune resources, and it will create the necessary namespace if it doesn't exist.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: eso-manifests
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kalpit10/cloud-native-ecommerce-platform.git
+    targetRevision: phase1-test
+    path: gitops/eso/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

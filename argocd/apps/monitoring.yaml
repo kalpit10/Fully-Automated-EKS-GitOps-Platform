@@ -12,10 +12,14 @@ spec:
   ignoreDifferences:
     - group: monitoring.coreos.com
       kind: Prometheus
+      jqPathExpressions:
+        - .status.terminatingReplicas
       jsonPointers:
         - /status
     - group: monitoring.coreos.com
       kind: Alertmanager
+      jqPathExpressions:
+        - .status.terminatingReplicas
       jsonPointers:
         - /status
   sources:

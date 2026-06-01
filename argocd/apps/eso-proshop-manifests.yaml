@@ -24,13 +24,3 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-    managedNamespaceMetadata:
-    labels:
-      app.kubernetes.io/managed-by: argocd
-      app.kubernetes.io/part-of: proshop
-      environment: dev # prod: prod
-      pod-security.kubernetes.io/enforce: baseline
-      pod-security.kubernetes.io/audit: baseline
-      pod-security.kubernetes.io/warn: baseline
-    annotations:
-      argocd.argoproj.io/managed-by: argocd

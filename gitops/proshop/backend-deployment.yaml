@@ -17,9 +17,17 @@ spec:
         app: backend
         app.kubernetes.io/part-of: proshop
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: # Enforce runtime security best practices with a non-root user and seccomp. Seccomp adds an additional layer of defense by restricting system calls, reducing the attack surface if the container is compromised.
+          type: RuntimeDefault
       containers:
         - name: backend
           image: 395136123952.dkr.ecr.us-east-1.amazonaws.com/proshop-backend:latest # prod: same URI, tag managed by CI/CD in Phase 4
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
           ports:
             - containerPort: 5000
           envFrom:

@@ -1,0 +1,317 @@
+name: teardown
+
+on:
+    workflow_dispatch:
+        inputs:
+            environment:
+                description: "Target environment"
+                required: true
+                type: choice
+                options:
+                    - dev
+                    - prod
+            confirm:
+                description: "Type DESTROY to confirm"
+                required: true
+                type: string
+
+permissions:
+    id-token: write
+    contents: read
+
+jobs:
+    teardown:
+        name: Teardown (${{ github.event.inputs.environment }})
+        runs-on: ubuntu-latest
+        # Gated by GitHub Environment protection rule.
+        # repo Settings → Environments → destroy-gate → add yourself as required reviewer.
+        environment: destroy-gate
+
+        steps:
+            - name: Validate confirmation
+              run: |
+                  if [ "${{ github.event.inputs.confirm }}" != "DESTROY" ]; then
+                    echo "Expected DESTROY, got '${{ github.event.inputs.confirm }}'. Aborting."
+                    exit 1
+                  fi
+                  echo "Confirmed."
+
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+              # pin: actions/checkout v4.2.2
+
+            - name: Configure AWS Credentials (OIDC)
+              uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+              # pin: aws-actions/configure-aws-credentials v4.0.2
+              with:
+                  role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+                  aws-region: ${{ secrets.AWS_REGION }}
+
+            - name: Install kubectl
+              run: |
+                  KUBECTL_VERSION=$(curl -Ls https://dl.k8s.io/release/stable.txt)
+                  curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+                  curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256"
+                  echo "$(cat kubectl.sha256) kubectl" | sha256sum --check
+                  chmod +x kubectl
+                  sudo mv kubectl /usr/local/bin/kubectl
+
+            - name: Install Helm
+              run: |
+                  curl -LO https://get.helm.sh/helm-v3.17.0-linux-amd64.tar.gz
+                  curl -LO https://get.helm.sh/helm-v3.17.0-linux-amd64.tar.gz.sha256sum
+                  sha256sum --check helm-v3.17.0-linux-amd64.tar.gz.sha256sum
+                  tar -zxvf helm-v3.17.0-linux-amd64.tar.gz
+                  sudo mv linux-amd64/helm /usr/local/bin/helm
+
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269ef032
+              # pin: hashicorp/setup-terraform v3.1.2
+              with:
+                  terraform_version: 1.12.2
+
+            - name: Configure kubeconfig
+              run: |
+                  ENV="${{ github.event.inputs.environment }}"
+                  aws eks update-kubeconfig --name proshop-eks-${ENV} --region us-east-1
+
+            # ── STEP 1: Disable root-app auto-sync ──────────────────────────────────
+            # Prevents ArgoCD from recreating deleted child apps while we're tearing down.
+            - name: Disable root-app auto-sync
+              run: |
+                  kubectl patch application root-app -n argocd \
+                    --type merge \
+                    --patch '{"spec":{"syncPolicy":{"automated":null}}}' || true
+                  echo "Auto-sync disabled."
+
+            # ── STEP 2: Strip and delete Ingress BEFORE touching LBC ────────────────
+            # Issue 4: Once LBC pods are gone, nothing can process the ALB finalizer.
+            # The ingress finalizer must be stripped while LBC is still running.
+            - name: Strip Ingress finalizer and delete Ingress
+              run: |
+                  if kubectl get ingress proshop-ingress -n proshop &>/dev/null; then
+                    echo "Stripping ingress finalizer..."
+                    kubectl patch ingress proshop-ingress -n proshop \
+                      --type merge \
+                      --patch '{"metadata":{"finalizers":[]}}' || true
+
+                    echo "Deleting ingress..."
+                    kubectl delete ingress proshop-ingress -n proshop \
+                      --force --grace-period=0 || true
+
+                    echo "Waiting 30s for ALB to deregister..."
+                    sleep 30
+                  else
+                    echo "Ingress not found — skipping."
+                  fi
+
+            # ── STEP 3: Delete child Applications ───────────────────────────────────
+            # Issue 1: Applications get stuck on finalizers. Each app gets 60 seconds
+            # before we strip its finalizer and force-move on.
+            # Order matters — monitoring and proshop before platform components.
+            - name: Delete child Applications
+              run: |
+                  APPS=(
+                    kube-prometheus-stack
+                    proshop
+                    eso-proshop-manifests
+                    eso-manifests
+                    metrics-server
+                    aws-load-balancer-controller
+                    external-secrets
+                    storageclass
+                  )
+
+                  for APP in "${APPS[@]}"; do
+                    if ! kubectl get application "$APP" -n argocd &>/dev/null; then
+                      echo "$APP not found — skipping."
+                      continue
+                    fi
+
+                    echo "Deleting $APP..."
+                    kubectl delete application "$APP" -n argocd &
+
+                    # Wait up to 60 seconds for clean deletion
+                    ELAPSED=0
+                    while kubectl get application "$APP" -n argocd &>/dev/null; do
+                      if [ $ELAPSED -ge 60 ]; then
+                        echo "$APP still present after 60s — stripping finalizer."
+                        kubectl patch application "$APP" -n argocd \
+                          --type merge \
+                          --patch '{"metadata":{"finalizers":[]}}' || true
+                        break
+                      fi
+                      sleep 5
+                      ELAPSED=$((ELAPSED + 5))
+                    done
+
+                    # Final wait after finalizer strip
+                    sleep 5
+                    echo "$APP deletion complete."
+                  done
+
+            # ── STEP 4: Delete ArgoCD self-management app ────────────────────────────
+            # Issue 2: Deleting the argocd Application restarts argocd-server.
+            # Strip the finalizer immediately if it hangs beyond 30 seconds.
+            - name: Delete argocd self-management Application
+              run: |
+                  if kubectl get application argocd -n argocd &>/dev/null; then
+                    echo "Deleting argocd application..."
+                    kubectl delete application argocd -n argocd &
+
+                    ELAPSED=0
+                    while kubectl get application argocd -n argocd &>/dev/null; do
+                      if [ $ELAPSED -ge 30 ]; then
+                        echo "Stuck after 30s — stripping finalizer."
+                        kubectl patch application argocd -n argocd \
+                          --type merge \
+                          --patch '{"metadata":{"finalizers":[]}}' || true
+                        break
+                      fi
+                      sleep 5
+                      ELAPSED=$((ELAPSED + 5))
+                    done
+                  else
+                    echo "argocd application not found — skipping."
+                  fi
+
+            # ── STEP 5: Delete root-app ──────────────────────────────────────────────
+            - name: Delete root-app
+              run: |
+                  if kubectl get application root-app -n argocd &>/dev/null; then
+                    echo "Deleting root-app..."
+                    kubectl delete application root-app -n argocd &
+
+                    ELAPSED=0
+                    while kubectl get application root-app -n argocd &>/dev/null; do
+                      if [ $ELAPSED -ge 60 ]; then
+                        echo "Stuck — stripping finalizer."
+                        kubectl patch application root-app -n argocd \
+                          --type merge \
+                          --patch '{"metadata":{"finalizers":[]}}' || true
+                        break
+                      fi
+                      sleep 5
+                      ELAPSED=$((ELAPSED + 5))
+                    done
+                  else
+                    echo "root-app not found — skipping."
+                  fi
+
+            # ── STEP 6: Helm uninstall ArgoCD ────────────────────────────────────────
+            - name: Helm uninstall ArgoCD
+              run: |
+                  if helm status argocd -n argocd &>/dev/null; then
+                    helm uninstall argocd -n argocd --wait --timeout 5m || true
+                  else
+                    echo "ArgoCD Helm release not found — skipping."
+                  fi
+
+            # ── STEP 7: Force delete all application namespaces ─────────────────────
+            # Issue 3: Namespaces get stuck in Terminating. Always force delete.
+            - name: Force delete namespaces
+              run: |
+                  for NS in argocd external-secrets monitoring proshop; do
+                    if kubectl get namespace "$NS" &>/dev/null; then
+                      echo "Force deleting namespace: $NS"
+                      kubectl delete namespace "$NS" --force --grace-period=0 || true
+                    else
+                      echo "Namespace $NS not found — skipping."
+                    fi
+                  done
+
+                  # Give AWS a moment to process ENI and SG releases
+                  echo "Waiting 60s for AWS to release network resources..."
+                  sleep 60
+
+            # ── STEP 8: Clean up orphaned AWS network resources ──────────────────────
+            # Issue 5: ALB leaves behind ENIs and security groups that block VPC destroy.
+            # Get the VPC ID from Terraform state then clean up anything tagged by EKS.
+            - name: Clean up orphaned AWS network resources
+              run: |
+                  ENV="${{ github.event.inputs.environment }}"
+                  cd infra/envs/${ENV}
+                  terraform init -input=false
+
+                  VPC_ID=$(terraform output -raw vpc_id 2>/dev/null || echo "")
+
+                  if [ -z "$VPC_ID" ]; then
+                    echo "Could not retrieve VPC ID from Terraform output — skipping network cleanup."
+                  else
+                    echo "VPC ID: $VPC_ID"
+
+                    # Delete orphaned ENIs left by the ALB
+                    echo "Cleaning orphaned network interfaces..."
+                    ENI_IDS=$(aws ec2 describe-network-interfaces \
+                      --filters "Name=vpc-id,Values=${VPC_ID}" \
+                                "Name=status,Values=available" \
+                      --query "NetworkInterfaces[*].NetworkInterfaceId" \
+                      --output text)
+
+                    if [ -n "$ENI_IDS" ]; then
+                      for ENI in $ENI_IDS; do
+                        echo "Deleting ENI: $ENI"
+                        aws ec2 delete-network-interface --network-interface-id "$ENI" || true
+                      done
+                    else
+                      echo "No orphaned ENIs found."
+                    fi
+
+                    # Delete security groups created by LBC (prefixed k8s-)
+                    echo "Cleaning orphaned security groups..."
+                    SG_IDS=$(aws ec2 describe-security-groups \
+                      --filters "Name=vpc-id,Values=${VPC_ID}" \
+                                "Name=group-name,Values=k8s-*" \
+                      --query "SecurityGroups[*].GroupId" \
+                      --output text)
+
+                    if [ -n "$SG_IDS" ]; then
+                      for SG in $SG_IDS; do
+                        echo "Deleting security group: $SG"
+                        aws ec2 delete-security-group --group-id "$SG" || true
+                      done
+                    else
+                      echo "No orphaned security groups found."
+                    fi
+                  fi
+              working-directory: .
+
+            # ── STEP 9: Layered Terraform destroy ────────────────────────────────────
+            # EKS first — removes node groups and cluster.
+            # VPC second — now safe because ALB, ENIs, and SGs are gone.
+            # Final destroy — cleans up ECR, IAM, and anything remaining.
+            - name: Terraform destroy — EKS
+              run: |
+                  ENV="${{ github.event.inputs.environment }}"
+                  cd infra/envs/${ENV}
+                  terraform init -input=false
+                  terraform destroy \
+                    -target=module.eks \
+                    -auto-approve \
+                    -input=false \
+                    -var-file="${ENV}.tfvars"
+
+            - name: Terraform destroy — VPC
+              run: |
+                  ENV="${{ github.event.inputs.environment }}"
+                  cd infra/envs/${ENV}
+                  terraform destroy \
+                    -target=module.vpc \
+                    -auto-approve \
+                    -input=false \
+                    -var-file="${ENV}.tfvars"
+
+            - name: Terraform destroy — remaining
+              run: |
+                  ENV="${{ github.event.inputs.environment }}"
+                  cd infra/envs/${ENV}
+                  terraform destroy \
+                    -auto-approve \
+                    -input=false \
+                    -var-file="${ENV}.tfvars"
+
+            - name: Teardown complete
+              run: |
+                  echo "## Teardown Complete" >> $GITHUB_STEP_SUMMARY
+                  echo "Environment: ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+                  echo "All resources destroyed." >> $GITHUB_STEP_SUMMARY

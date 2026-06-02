@@ -225,18 +225,20 @@ jobs:
   # ── STANDUP SEQUENCE ──────────────────────────────────────────────────────
   # Only runs on workflow_dispatch. Push to main runs plan+apply only.
 
-  trigger-image-build:
+trigger-image-build:
     name: Trigger Image Build
     runs-on: ubuntu-latest
     needs: tf-dev-apply
-    # Standup sequence is dispatch-only — push to main should not trigger bootstrap
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev'
     steps:
-      - name: Trigger webapp build-and-push pipeline
+      - name: Trigger and poll webapp build-and-push pipeline
         env:
           WEBAPP_TRIGGER_TOKEN: ${{ secrets.WEBAPP_TRIGGER_TOKEN }}
         run: |
-          echo "Triggering webapp pipeline..."
+          # Record timestamp before dispatch so we can find the exact new run
+          DISPATCH_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "Dispatching at: $DISPATCH_TIME"
+
           HTTP_STATUS=$(curl -s -X POST \
             -H "Authorization: Bearer $WEBAPP_TRIGGER_TOKEN" \
             -H "Accept: application/vnd.github+json" \
@@ -249,28 +251,51 @@ jobs:
             echo "Failed to trigger webapp pipeline. HTTP status: $HTTP_STATUS"
             exit 1
           fi
-          echo "Dispatch accepted (HTTP 204)."
+          echo "Dispatch accepted (HTTP 204). Waiting for run to appear..."
 
-      - name: Wait for run to register
-        run: sleep 15
+          # Wait for GitHub to register the new run
+          sleep 15
 
-      - name: Poll until webapp pipeline completes
-        env:
-          WEBAPP_TRIGGER_TOKEN: ${{ secrets.WEBAPP_TRIGGER_TOKEN }}
-        run: |
+          # Find the run ID created after our dispatch timestamp
+          echo "Looking for run created after $DISPATCH_TIME..."
+          RUN_ID=""
+          for i in $(seq 1 10); do
+            RUN_ID=$(curl -s \
+              -H "Authorization: Bearer $WEBAPP_TRIGGER_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/kalpit10/Capstone-WebApp/actions/workflows/build-and-push.yml/runs?branch=main&per_page=5" \
+              | jq -r --arg dt "$DISPATCH_TIME" \
+                '.workflow_runs[] | select(.created_at >= $dt) | .id' \
+              | head -1)
+
+            if [ -n "$RUN_ID" ]; then
+              echo "Found run ID: $RUN_ID"
+              break
+            fi
+            echo "Run not yet visible, waiting... (attempt $i/10)"
+            sleep 10
+          done
+
+          if [ -z "$RUN_ID" ]; then
+            echo "Could not find the triggered run after 100 seconds. Aborting."
+            exit 1
+          fi
+
+          # Poll the specific run by ID
           TIMEOUT=1800
           INTERVAL=30
           ELAPSED=0
 
           while [ $ELAPSED -lt $TIMEOUT ]; do
-            RUNS=$(curl -s \
+            RUN_DATA=$(curl -s \
               -H "Authorization: Bearer $WEBAPP_TRIGGER_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/kalpit10/Capstone-WebApp/actions/workflows/build-and-push.yml/runs?branch=main&per_page=1")
+              "https://api.github.com/repos/kalpit10/Capstone-WebApp/actions/runs/$RUN_ID")
 
-            STATUS=$(echo "$RUNS" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
-            CONCLUSION=$(echo "$RUNS" | grep -o '"conclusion":"[^"]*"' | head -1 | cut -d'"' -f4)
+            STATUS=$(echo "$RUN_DATA" | jq -r '.status // empty')
+            CONCLUSION=$(echo "$RUN_DATA" | jq -r '.conclusion // empty')
 
             echo "Status: $STATUS | Conclusion: $CONCLUSION | Elapsed: ${ELAPSED}s"
 

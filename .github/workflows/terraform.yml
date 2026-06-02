@@ -49,7 +49,7 @@ jobs:
         # pin: actions/checkout v4.2.2
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269ef032
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
         # pin: hashicorp/setup-terraform v3.1.2
         with:
           terraform_version: 1.12.2

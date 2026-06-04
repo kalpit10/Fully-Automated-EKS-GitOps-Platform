@@ -118,6 +118,7 @@ jobs:
             proshop
             eso-proshop-manifests
             eso-manifests
+            eso
             metrics-server
             aws-load-balancer-controller
             external-secrets

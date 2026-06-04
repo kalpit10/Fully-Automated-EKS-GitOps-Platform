@@ -50,11 +50,12 @@ module "eks" {
 }
 
 module "cloudwatch" {
-  source = "../../../modules/cloudwatch"
+  source             = "../../../modules/cloudwatch"
+  alb_name_prefix    = var.alb_name_prefix
+  notification_email = var.notification_email
 
   region       = var.region
   cluster_name = module.eks.cluster_name
   namespace    = "proshop"
   env          = var.env
-  alb_name     = var.alb_name
 }

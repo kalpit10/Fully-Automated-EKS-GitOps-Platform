@@ -44,8 +44,12 @@ node_max_size      = 5
 node_instance_type = "t3.large"
 
 # ALB
-alb_name = "proshop-alb-prod"
+# Stable LBC ALB name prefix — the LBC names ALBs as k8s-<namespace>-<ingress>-<hash>
+# This substring is stable across destroy/redeploy cycles 
+alb_name_prefix = "k8s-proshop"
 
 backend_secret_id = "proshop/backend-prod"
+
+notification_email = "kalpit.swami@gmail.com"
 
 # cluster_admin_arn = "arn:aws:iam::395136123952:user/terraform-user"

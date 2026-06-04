@@ -48,13 +48,18 @@ variable "node_max_size" {
   type        = number
 }
 
-variable "alb_name" {
-  description = "Name for the AWS Application Load Balancer - used by CloudWatch dashboard search expressions"
+variable "alb_name_prefix" {
+  description = "Stable substring of the LBC-generated ALB name for CloudWatch SEARCH expressions. Use 'k8s-proshop' — this prefix is stable across redeployments."
   type        = string
 }
 
 variable "node_instance_type" {
   description = "EC2 instance type for worker nodes"
+  type        = string
+}
+
+variable "notification_email" {
+  description = "Email address to receive CloudWatch Alarm SNS notifications"
   type        = string
 }
 

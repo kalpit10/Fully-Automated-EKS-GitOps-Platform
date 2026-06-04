@@ -225,17 +225,17 @@ jobs:
   # ── STANDUP SEQUENCE ──────────────────────────────────────────────────────
   # Only runs on workflow_dispatch. Push to main runs plan+apply only.
 
-trigger-image-build:
+  trigger-image-build:
     name: Trigger Image Build
     runs-on: ubuntu-latest
     needs: tf-dev-apply
+    # Standup sequence is dispatch-only — push to main should not trigger bootstrap
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev'
     steps:
       - name: Trigger and poll webapp build-and-push pipeline
         env:
           WEBAPP_TRIGGER_TOKEN: ${{ secrets.WEBAPP_TRIGGER_TOKEN }}
         run: |
-          # Record timestamp before dispatch so we can find the exact new run
           DISPATCH_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           echo "Dispatching at: $DISPATCH_TIME"
 
@@ -253,20 +253,19 @@ trigger-image-build:
           fi
           echo "Dispatch accepted (HTTP 204). Waiting for run to appear..."
 
-          # Wait for GitHub to register the new run
           sleep 15
 
-          # Find the run ID created after our dispatch timestamp
           echo "Looking for run created after $DISPATCH_TIME..."
           RUN_ID=""
+          JQ_FILTER='.workflow_runs[] | select(.created_at >= $dt) | .id'
+
           for i in $(seq 1 10); do
             RUN_ID=$(curl -s \
               -H "Authorization: Bearer $WEBAPP_TRIGGER_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
               "https://api.github.com/repos/kalpit10/Capstone-WebApp/actions/workflows/build-and-push.yml/runs?branch=main&per_page=5" \
-              | jq -r --arg dt "$DISPATCH_TIME" \
-                '.workflow_runs[] | select(.created_at >= $dt) | .id' \
+              | jq -r --arg dt "$DISPATCH_TIME" "$JQ_FILTER" \
               | head -1)
 
             if [ -n "$RUN_ID" ]; then
@@ -282,7 +281,6 @@ trigger-image-build:
             exit 1
           fi
 
-          # Poll the specific run by ID
           TIMEOUT=1800
           INTERVAL=30
           ELAPSED=0

@@ -4,11 +4,7 @@ alertmanager:
   enabled: true
   alertmanagerSpec:
     replicas: 1
-    # Why alertmanagerConfigSecret and not alertmanager.config:
-    # Credentials live in AWS Secrets Manager, pulled by ESO into a
-    # Kubernetes Secret. Alertmanager mounts that Secret directly.
-    # Nothing sensitive ever touches Git.
-    alertmanagerConfigSecret: alertmanager-smtp-secret
+    configSecret: alertmanager-smtp-secret
     storage:
       volumeClaimTemplate:
         spec:

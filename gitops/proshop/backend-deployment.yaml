@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
   namespace: proshop
   labels:
     app: backend
@@ -19,7 +21,6 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext:
-        runAsNonRoot: true
         seccompProfile: # Enforce runtime security best practices with a non-root user and seccomp. Seccomp adds an additional layer of defense by restricting system calls, reducing the attack surface if the container is compromised.
           type: RuntimeDefault
       containers:
@@ -27,7 +28,9 @@ spec:
           image: 395136123952.dkr.ecr.us-east-1.amazonaws.com/proshop-backend:9b00be51b630240cf30ccf05e18e0599ca262c00 # prod: same URI, tag managed by CI/CD in Phase 4
           securityContext:
             allowPrivilegeEscalation: false
-            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 5000
           envFrom:

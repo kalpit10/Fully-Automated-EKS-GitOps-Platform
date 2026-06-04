@@ -28,11 +28,6 @@ spec:
           image: 395136123952.dkr.ecr.us-east-1.amazonaws.com/proshop-frontend:9b00be51b630240cf30ccf05e18e0599ca262c00 # prod: same URI, tag managed by CI/CD in Phase 4
           securityContext:
             allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-              add:
-                - NET_BIND_SERVICE
           ports:
             - containerPort: 80
           resources:

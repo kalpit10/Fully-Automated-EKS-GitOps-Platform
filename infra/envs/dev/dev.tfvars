@@ -51,5 +51,4 @@ backend_secret_id = "proshop/backend"
 
 notification_email = "kalpit.swami@gmail.com"
 
-
 # cluster_admin_arn = "arn:aws:iam::395136123952:user/terraform-user"

@@ -20,11 +20,17 @@ variable "env" {
 }
 
 variable "alb_name_prefix" {
-  description = "Stable substring of the LBC-generated ALB name used to scope CloudWatch SEARCH expressions. The LBC names ALBs as k8s-<namespace>-<ingress>-<hash>. Set this to the stable prefix, e.g. 'k8s-proshop', so SEARCH matches the correct ALB regardless of hash suffix changes on redeploy."
+  description = "Stable substring of the LBC-generated ALB name used to scope CloudWatch dashboard SEARCH expressions. The LBC names ALBs as k8s-<namespace>-<ingress>-<hash>. Set to 'k8s-proshop' — stable across redeployments."
   type        = string
 }
 
 variable "notification_email" {
-  description = "Email address for CloudWatch Alarm SNS notifications"
+  description = "Email address for CloudWatch Alarm SNS notifications. Must be confirmed via the subscription email AWS sends after terraform apply."
   type        = string
+}
+
+variable "hpa_max_replicas" {
+  description = "Maximum replica count configured in the HPA for the proshop namespace. Used as the threshold for the HPA-at-max alarm."
+  type        = number
+  default     = 3
 }

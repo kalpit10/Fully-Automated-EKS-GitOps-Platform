@@ -229,17 +229,30 @@ jobs:
 
       # ── STEP 8: Clean up orphaned AWS network resources ──────────────────────
       # Issue 5: ALB leaves behind ENIs and security groups that block VPC destroy.
-      # Get the VPC ID from Terraform state then clean up anything tagged by EKS.
+      # VPC ID is fetched from AWS directly — more reliable than Terraform output
+      # during partial destroy when state may be incomplete.
       - name: Clean up orphaned AWS network resources
         run: |
           ENV="${{ github.event.inputs.environment }}"
-          cd infra/envs/${ENV}
-          terraform init -input=false
 
-          VPC_ID=$(terraform output -raw vpc_id 2>/dev/null || echo "")
+          # Get VPC ID directly from AWS using environment tag.
+          # Terraform output is unreliable during partial destroy — warnings
+          # bleed into stdout and corrupt the variable value.
+          VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Environment,Values=${ENV}" \
+            --query "Vpcs[0].VpcId" \
+            --output text 2>/dev/null || echo "")
 
-          if [ -z "$VPC_ID" ]; then
-            echo "Could not retrieve VPC ID from Terraform output — skipping network cleanup."
+          # Fallback — try Terraform output, filter to only lines starting with vpc-
+          if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
+            cd infra/envs/${ENV}
+            terraform init -input=false -no-color > /dev/null 2>&1
+            VPC_ID=$(terraform output -raw vpc_id 2>/dev/null | grep -E "^vpc-" | head -1 || echo "")
+            cd -
+          fi
+
+          if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
+            echo "VPC not found — skipping network cleanup."
           else
             echo "VPC ID: $VPC_ID"
 
@@ -279,7 +292,6 @@ jobs:
               echo "No orphaned security groups found."
             fi
           fi
-        working-directory: .
 
       # ── STEP 9: Layered Terraform destroy ────────────────────────────────────
       # EKS first — removes node groups, cluster, and associated resources.

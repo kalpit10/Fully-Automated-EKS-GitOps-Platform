@@ -3,6 +3,8 @@ kind: HorizontalPodAutoscaler
 metadata:
   name: frontend-hpa
   namespace: proshop
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
   labels:
     app: frontend
     app.kubernetes.io/part-of: proshop

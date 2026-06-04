@@ -8,6 +8,7 @@ metadata:
   annotations:
     # Instructs LBC to create an ALB (not NLB)
     kubernetes.io/ingress.class: alb
+    argocd.argoproj.io/sync-wave: "3" # ensure Ingress is created after Deployments and HPAs
 
     # Internet-facing ALB in public subnets — accessible from the internet
     alb.ingress.kubernetes.io/scheme: internet-facing

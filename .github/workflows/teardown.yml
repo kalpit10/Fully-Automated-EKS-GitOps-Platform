@@ -293,10 +293,6 @@ jobs:
             fi
           fi
 
-      # ── STEP 9: Layered Terraform destroy ────────────────────────────────────
-      # EKS first — removes node groups, cluster, and associated resources.
-      # After EKS is gone, Terraform resolves remaining dependencies correctly
-      # in a single pass — VPC, ECR, IAM, and everything else.
       - name: Terraform destroy — EKS
         run: |
           ENV="${{ github.event.inputs.environment }}"
@@ -307,6 +303,83 @@ jobs:
             -auto-approve \
             -input=false \
             -var-file="${ENV}.tfvars"
+
+      # ── POST-EKS CLEANUP ─────────────────────────────────────────────────────
+      # EKS node termination releases ENIs and security groups that were
+      # in-use during the pre-destroy cleanup. This step catches them before
+      # Terraform tries to delete the VPC and fails on dependency violations.
+      - name: Post-EKS cleanup of released network resources
+        run: |
+          ENV="${{ github.event.inputs.environment }}"
+
+          VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Environment,Values=${ENV}" \
+            --query "Vpcs[0].VpcId" \
+            --output text 2>/dev/null || echo "")
+
+          if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
+            VPC_ID=$(cd infra/envs/${ENV} && terraform output -raw vpc_id 2>/dev/null | grep -E "^vpc-" | head -1 || echo "")
+          fi
+
+          if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
+            echo "VPC not found — skipping post-EKS cleanup."
+          else
+            echo "VPC ID: $VPC_ID"
+
+            # Wait for AWS to fully release EKS node resources
+            echo "Waiting 30s for AWS to release EKS node resources..."
+            sleep 30
+
+            # Delete orphaned target groups created by LBC
+            echo "Cleaning orphaned target groups..."
+            TG_ARNS=$(aws elbv2 describe-target-groups \
+              --query "TargetGroups[?VpcId=='${VPC_ID}'].TargetGroupArn" \
+              --output text 2>/dev/null || echo "")
+
+            if [ -n "$TG_ARNS" ] && [ "$TG_ARNS" != "None" ]; then
+              for TG in $TG_ARNS; do
+                echo "Deleting target group: $TG"
+                aws elbv2 delete-target-group --target-group-arn "$TG" || true
+              done
+            else
+              echo "No orphaned target groups found."
+            fi
+
+            # Delete ENIs now released by EKS node termination
+            echo "Cleaning released network interfaces..."
+            ENI_IDS=$(aws ec2 describe-network-interfaces \
+              --filters "Name=vpc-id,Values=${VPC_ID}" \
+                        "Name=status,Values=available" \
+              --query "NetworkInterfaces[*].NetworkInterfaceId" \
+              --output text 2>/dev/null || echo "")
+
+            if [ -n "$ENI_IDS" ] && [ "$ENI_IDS" != "None" ]; then
+              for ENI in $ENI_IDS; do
+                echo "Deleting ENI: $ENI"
+                aws ec2 delete-network-interface --network-interface-id "$ENI" || true
+              done
+            else
+              echo "No released ENIs found."
+            fi
+
+            # Delete security groups released by EKS — all non-default SGs.
+            # Safe at this point since EKS nodes are gone and nothing
+            # legitimate is still attached.
+            echo "Cleaning released security groups..."
+            SG_IDS=$(aws ec2 describe-security-groups \
+              --filters "Name=vpc-id,Values=${VPC_ID}" \
+              --query "SecurityGroups[?GroupName!='default'].GroupId" \
+              --output text 2>/dev/null || echo "")
+
+            if [ -n "$SG_IDS" ] && [ "$SG_IDS" != "None" ]; then
+              for SG in $SG_IDS; do
+                echo "Deleting security group: $SG"
+                aws ec2 delete-security-group --group-id "$SG" || true
+              done
+            else
+              echo "No released security groups found."
+            fi
+          fi
 
       - name: Terraform destroy — remaining
         run: |

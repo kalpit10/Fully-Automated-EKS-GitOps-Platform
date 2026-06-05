@@ -1,0 +1,24 @@
+# What does argocd server metrics scrape? 
+# It scrapes the metrics from the argocd-server component of Argo CD, which is responsible for managing and deploying applications in a Kubernetes cluster. 
+# The metrics collected from the argocd-server can include information about the health and performance of the server, 
+# as well as details about the applications being managed by Argo CD. These metrics can be used for monitoring and troubleshooting purposes, 
+# allowing administrators to gain insights into the behavior of their Argo CD deployment and ensure that it is running smoothly.
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-server-metrics
+  namespace: argocd
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - argocd
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-server
+  endpoints:
+    - port: metrics # port name on the argocd-server Service (8083)
+      interval: 30s
+      path: /metrics

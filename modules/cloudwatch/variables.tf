@@ -34,3 +34,9 @@ variable "hpa_max_replicas" {
   type        = number
   default     = 3
 }
+
+variable "create_alb_alarms" {
+  description = "Set to true only after the ALB exists (ArgoCD has synced the Ingress). Gates the data.aws_lb lookup and all three ALB-level alarms. Default false so standup and teardown full applies never evaluate the ALB data source."
+  type        = bool
+  default     = false
+}

@@ -531,4 +531,5 @@ jobs:
             -auto-approve \
             -input=false \
             -var-file="dev.tfvars" \
+            -var="create_alb_alarms=true" \
             -target=module.cloudwatch

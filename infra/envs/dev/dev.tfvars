@@ -45,7 +45,7 @@ node_instance_type = "t3.medium"
 
 # Stable LBC ALB name prefix — the LBC names ALBs as k8s-<namespace>-<ingress>-<hash>
 # This substring is stable across destroy/redeploy cycles
-alb_name_prefix    = "k8s-proshop"
+alb_name_prefix = "k8s-proshop"
 
 backend_secret_id = "proshop/backend"
 

@@ -54,9 +54,9 @@ module "cloudwatch" {
   alb_name_prefix    = var.alb_name_prefix
   notification_email = var.notification_email
 
-  region       = var.region
-  cluster_name = module.eks.cluster_name
-  namespace    = "proshop"
-  env          = var.env
+  region            = var.region
+  cluster_name      = module.eks.cluster_name
+  namespace         = "proshop"
+  env               = var.env
   create_alb_alarms = var.create_alb_alarms
 }

@@ -120,6 +120,7 @@ jobs:
             eso-manifests
             eso
             grafana-dashboards
+            argocd-monitors
             metrics-server
             aws-load-balancer-controller
             external-secrets

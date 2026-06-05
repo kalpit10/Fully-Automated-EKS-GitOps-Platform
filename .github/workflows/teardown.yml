@@ -119,6 +119,7 @@ jobs:
             eso-proshop-manifests
             eso-manifests
             eso
+            grafana-dashboards
             metrics-server
             aws-load-balancer-controller
             external-secrets

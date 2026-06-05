@@ -67,3 +67,9 @@ variable "notification_email" {
 #   description = "IAM ARN of the cluster administrator"
 #   type        = string
 # }
+
+variable "create_alb_alarms" {
+  description = "Gates the ALB data source and ALB-level CloudWatch alarms. False by default — set to true only after the ALB exists."
+  type        = bool
+  default     = false
+}

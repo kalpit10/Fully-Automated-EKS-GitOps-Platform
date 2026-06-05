@@ -58,4 +58,5 @@ module "cloudwatch" {
   cluster_name = module.eks.cluster_name
   namespace    = "proshop"
   env          = var.env
+  create_alb_alarms = var.create_alb_alarms
 }

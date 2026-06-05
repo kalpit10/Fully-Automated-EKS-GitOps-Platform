@@ -54,4 +54,5 @@ module "cloudwatch" {
   env                = var.env
   alb_name_prefix    = var.alb_name_prefix
   notification_email = var.notification_email
+  create_alb_alarms  = var.create_alb_alarms
 }

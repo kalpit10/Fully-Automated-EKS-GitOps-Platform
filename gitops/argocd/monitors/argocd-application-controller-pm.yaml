@@ -1,0 +1,21 @@
+# This file defines a PodMonitor for the ArgoCD Application Controller, which allows Prometheus to scrape metrics from the controller pods.
+# It is part of the monitoring setup for ArgoCD, ensuring that we can monitor the health and performance of the Application Controller component.
+
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: argocd-application-controller
+  namespace: argocd
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - argocd
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-application-controller
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics

@@ -70,8 +70,15 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
-      - name: Terraform Plan
-        run: terraform plan -input=false -no-color -var-file="dev.tfvars"
+      - name: Terraform Plan (vpc, ecr, eks)
+        run: |
+          terraform plan \
+            -input=false \
+            -no-color \
+            -var-file="dev.tfvars" \
+            -target=module.vpc \
+            -target=module.ecr \
+            -target=module.eks
 
   tf-prod-plan:
     name: Prod Plan
@@ -110,8 +117,15 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
-      - name: Terraform Plan
-        run: terraform plan -input=false -no-color -var-file="prod.tfvars"
+      - name: Terraform Plan (vpc, ecr, eks)
+        run: |
+          terraform plan \
+            -input=false \
+            -no-color \
+            -var-file="prod.tfvars" \
+            -target=module.vpc \
+            -target=module.ecr \
+            -target=module.eks
 
   tf-dev-apply:
     name: Dev Apply
@@ -146,7 +160,14 @@ jobs:
         run: terraform init -input=false
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve -input=false -var-file="dev.tfvars"
+        run: |
+          terraform apply \
+            -auto-approve \
+            -input=false \
+            -var-file="dev.tfvars" \
+            -target=module.vpc \
+            -target=module.ecr \
+            -target=module.eks
 
   tf-prod-apply:
     name: Prod Apply
@@ -181,7 +202,14 @@ jobs:
         run: terraform init -input=false
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve -input=false -var-file="prod.tfvars"
+        run: |
+          terraform apply \
+            -auto-approve \
+            -input=false \
+            -var-file="prod.tfvars" \
+            -target=module.vpc \
+            -target=module.ecr \
+            -target=module.eks
 
   checkov:
     name: Checkov IaC Scan
@@ -450,3 +478,57 @@ jobs:
           else
             echo "Ingress not yet available. Run: kubectl get ingress -n proshop" >> $GITHUB_STEP_SUMMARY
           fi
+
+  # ── CLOUDWATCH ALARMS ─────────────────────────────────────────────────────
+  # Intentionally separated from tf-dev-apply. The cloudwatch module contains
+  # a data "aws_lb" tag lookup that requires the ALB to exist at apply time.
+  # The ALB is provisioned by the AWS Load Balancer Controller when it processes
+  # the Ingress object — that happens during ArgoCD sync, after bootstrap-argocd.
+  # validate-deployment confirms all 10 apps are Synced and Healthy before this
+  # job runs, guaranteeing the ALB exists and the data source will resolve.
+
+  apply-cloudwatch-alarms:
+    name: Apply CloudWatch Alarms
+    runs-on: ubuntu-latest
+    needs: validate-deployment
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev'
+    defaults:
+      run:
+        working-directory: infra/envs/dev
+    environment: dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        # pin: actions/checkout v4.2.2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        # pin: hashicorp/setup-terraform v3.1.2
+        with:
+          terraform_version: 1.12.2
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        # pin: aws-actions/configure-aws-credentials v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Plan (cloudwatch)
+        run: |
+          terraform plan \
+            -input=false \
+            -no-color \
+            -var-file="dev.tfvars" \
+            -target=module.cloudwatch
+
+      - name: Apply CloudWatch module (ALB now exists)
+        run: |
+          terraform apply \
+            -auto-approve \
+            -input=false \
+            -var-file="dev.tfvars" \
+            -target=module.cloudwatch

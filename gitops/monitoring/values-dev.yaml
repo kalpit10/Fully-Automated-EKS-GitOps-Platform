@@ -62,6 +62,21 @@ grafana:
       labelValue: "1"
       folder: /var/lib/grafana/dashboards
       searchNamespace: monitoring
+  # Datasource provisioning - registered before dashboards load on every pod start.
+  # Name must match the __inputs block in dashboard JSON exactly.
+  # kubernetes-cluster.yaml, node-exporter.yaml, and argocd.yaml all reference
+  # DS__VICTORIAMETRICS-PROD-ALL which Grafana resolves to name "VictoriaMetrics-prod-all".
+  # The in-cluster URL is stable across destroy/redeploy — derived from fullnameOverride
+  # and namespace, both fixed in Git. No UID hardcoding — Grafana assigns UIDs at
+  # startup and the provisioned name is what the dashboard template variable resolves against.
+  additionalDataSources:
+    - name: VictoriaMetrics-prod-all
+      type: prometheus
+      url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+      access: proxy
+      isDefault: true
+      jsonData:
+        timeInterval: 30s
 
 nodeExporter: # node exporter is used to collect node-level metrics such as CPU, memory, disk, and network usage. It runs as a DaemonSet on each node in the cluster.
   enabled: true

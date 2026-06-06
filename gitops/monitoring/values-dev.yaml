@@ -1,0 +1,88 @@
+fullnameOverride: "kube-prometheus-stack"
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    replicas: 1
+    configSecret: alertmanager-smtp-secret
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 5Gi
+
+prometheus:
+  prometheusSpec:
+    replicas: 1
+    retention: 3d
+    retentionSize: "8GB"
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+grafana:
+  enabled: true
+  replicas: 1
+  admin:
+    existingSecret: "backend-secret"
+    userKey: grafana_username
+    passwordKey: grafana_password
+  service:
+    type: ClusterIP
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  sidecar: # sidecar for provisioning Grafana dashboards from ConfigMaps. It watches for ConfigMaps with the label "grafana_dashboard=1" in the "monitoring" namespace and automatically adds them to Grafana.
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      folder: /var/lib/grafana/dashboards
+      searchNamespace: monitoring
+  # Datasource provisioning - registered before dashboards load on every pod start.
+  # Name must match the __inputs block in dashboard JSON exactly.
+  # kubernetes-cluster.yaml, node-exporter.yaml, and argocd.yaml all reference
+  # DS__VICTORIAMETRICS-PROD-ALL which Grafana resolves to name "VictoriaMetrics-prod-all".
+  # The in-cluster URL is stable across destroy/redeploy — derived from fullnameOverride
+  # and namespace, both fixed in Git. No UID hardcoding — Grafana assigns UIDs at
+  # startup and the provisioned name is what the dashboard template variable resolves against.
+  additionalDataSources:
+    - name: VictoriaMetrics-prod-all
+      type: prometheus
+      uid: victoriametrics-prod-all
+      url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+      access: proxy
+      jsonData:
+        timeInterval: 30s
+
+nodeExporter: # node exporter is used to collect node-level metrics such as CPU, memory, disk, and network usage. It runs as a DaemonSet on each node in the cluster.
+  enabled: true
+
+kubeStateMetrics: # kube-state-metrics is used to collect Kubernetes API object metrics such as deployments, pods, and services. It runs as a Deployment in the cluster.
+  enabled: true
+
+defaultRules: # default alerting rules for Kubernetes components such as node, pod, and deployment. It is enabled by default, but can be disabled if we want to create our own custom rules.
+  create: true

@@ -1,0 +1,36 @@
+# This configures the ArgoCD Helm chart for use in a GitOps setup. It sets the server to run in insecure mode, configures the application resource tracking method, and enables the ApplicationSet controller. The notifications are disabled by default, but can be enabled if needed.
+# We're keeping it minimal - only overriding what we actually need to change from the defaults.
+
+# No domain is set by default, as this will depend on your specific environment and how you access the ArgoCD server. You can set this to your desired domain if needed.
+global:
+  domain: ""
+
+# The server is configured to run in insecure mode, which means it will not use TLS. This is often acceptable in a development or testing environment, but for production use, you should consider using TLS for secure communication.
+server:
+  service:
+    type: ClusterIP
+
+  extraArgs:
+    - --insecure
+
+# The application resource tracking method is set to "annotation", which means that ArgoCD will use annotations on the Kubernetes resources to track which resources belong to which applications. This is a common method for tracking resources in a GitOps setup.
+configs:
+  params:
+    server.insecure: true
+
+  cm:
+    application.resourceTrackingMethod: annotation
+
+# The repo server is configured to attempt to connect to Git repositories up to 5 times before giving up. This can help improve reliability in cases where there are transient network issues or the Git server is temporarily unavailable.
+repoServer:
+  env:
+    - name: ARGOCD_GIT_ATTEMPTS_COUNT
+      value: "5"
+
+# The ApplicationSet controller is enabled, which allows you to define sets of applications that can be managed together. This is useful for managing multiple applications that share common characteristics or are part of the same project.
+applicationSet:
+  enabled: true
+
+# Notifications are disabled by default in this configuration. If you want to enable notifications, you can set this to true and configure the notification settings as needed.
+notifications:
+  enabled: false

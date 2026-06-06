@@ -81,6 +81,7 @@ data "aws_iam_policy_document" "alb_controller" {
       "acm:ListCertificates",
       "acm:GetCertificate",
       "ec2:AuthorizeSecurityGroupIngress",
+      "ec2:RevokeSecurityGroupIngress", # Required for LBC to clean up stale SG rules
       "ec2:CreateSecurityGroup",
       "ec2:CreateTags",
       "ec2:DeleteTags",
@@ -170,14 +171,14 @@ resource "aws_iam_role_policy_attachment" "alb_controller_attach" {
 #     - Defines WHO can assume the role and under what condition.
 #     - The "assume_role_policy" allows assumption only by the OIDC provider
 #       when the token subject matches the Kubernetes service account:
-#       system:serviceaccount:default:backend-sa.
+#       system:serviceaccount:proshop:backend-sa.
 
 # 4️⃣  IAM Role Policy Attachment (aws_iam_role_policy_attachment)
 #     - Connects the above policy to the role.
 #     - Without this, the role exists but has no permissions.
 
 # 5️⃣  Kubernetes Service Account (backend-sa)
-#     - Created inside the EKS cluster (namespace: default).
+#     - Created inside the EKS cluster (namespace: proshop).
 #     - Annotated with the IAM Role ARN so pods using it automatically get
 #       temporary credentials for AWS API access.
 
@@ -230,7 +231,7 @@ data "aws_iam_policy_document" "backend_irsa_assume" {
       # The :sub part means the subject claim in the token, which actually means the service account can assume this role only.
       # So in basic terms, this condition ensures that only the service account named backend-sa in the default namespace can assume this role.
       variable = "${replace(aws_iam_openid_connect_provider.this.url, "https://", "")}:sub"
-      values   = ["system:serviceaccount:default:backend-sa"]
+      values   = ["system:serviceaccount:proshop:backend-sa"]
     }
   }
 }
@@ -239,7 +240,7 @@ data "aws_iam_policy_document" "backend_irsa_assume" {
 resource "aws_iam_role" "backend_irsa_role" {
   name = "proshop-backend-irsa-role"
   # Here in simple terms, we are defining who can assume this role.
-  # This role can be assumed by the backend service account in the default namespace.
+  # This role can be assumed by the backend service account in the proshop namespace.
   assume_role_policy = data.aws_iam_policy_document.backend_irsa_assume.json
 }
 
@@ -250,3 +251,79 @@ resource "aws_iam_role_policy_attachment" "backend_secrets_read_attach" {
   policy_arn = aws_iam_policy.backend_secrets_read.arn
 }
 
+# ------- EBS CSI DRIVER POLICY -------
+# This policy allows the EBS CSI driver to manage EBS volumes for the EKS cluster
+
+resource "aws_iam_role" "ebs_csi_role" {
+  name = "${var.cluster_name}-ebs-csi-role"
+
+  # Trust policy: only the EBS CSI controller ServiceAccount in kube-system
+  # can assume this role via OIDC WebIdentity.
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.this.arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "${replace(data.aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+          }
+        }
+      }
+    ]
+  })
+}
+
+# Attach the AWS-managed EBS CSI policy.
+# arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy grants
+# the exact EC2 and KMS permissions the driver needs to manage EBS volumes.
+resource "aws_iam_role_policy_attachment" "ebs_csi_policy" {
+  role       = aws_iam_role.ebs_csi_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
+
+# ------- EXTERNAL SECRETS OPERATOR (ESO) POLICY -------
+# This policy allows the ESO to read secrets from AWS Secrets Manager.
+resource "aws_iam_policy" "eso_secrets_policy" {
+  name = "${var.cluster_name}-eso-secrets-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:ListSecrets"]
+        Resource = "arn:aws:secretsmanager:us-east-1:${data.aws_caller_identity.current.account_id}:secret:proshop/*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role" "eso_role" {
+  name = "${var.cluster_name}-eso-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Federated = aws_iam_openid_connect_provider.this.arn
+      }
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${replace(data.aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:external-secrets:external-secrets-sa"
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "eso_policy_attach" {
+  role       = aws_iam_role.eso_role.name
+  policy_arn = aws_iam_policy.eso_secrets_policy.arn
+}

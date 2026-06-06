@@ -1,0 +1,31 @@
+# This is ArgoCD managing its own Helm chart after the initial install. It's called self-management.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # sources is used to specify multiple sources for the application. In this case, we have two sources: one for the Argo CD Helm chart and another for the custom values file stored in a Git repository.
+  sources:
+    - repoURL: https://argoproj.github.io/argo-helm
+      chart: argo-cd
+      targetRevision: "7.8.23"
+      helm:
+        valueFiles:
+          - $values/gitops/argocd/values.yaml
+    - repoURL: https://github.com/kalpit10/cloud-native-ecommerce-platform.git
+      targetRevision: phase1-test
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

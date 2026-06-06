@@ -10,6 +10,9 @@ resource "aws_ecr_repository" "this" {
   # IMMUTABLE → you cannot override an existing tag (good for production safety).
   image_tag_mutability = var.image_tag_mutability
 
+  force_delete = true # allows destroy even when images exist
+
+
   // It checks for known vulnerabilities in images pushed to the repository
   image_scanning_configuration {
     scan_on_push = var.image_scan

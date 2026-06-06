@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: proshop
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app: frontend
+    app.kubernetes.io/part-of: proshop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        app.kubernetes.io/part-of: proshop
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: # Enforce runtime security best practices with a non-root user and seccomp. Seccomp adds an additional layer of defense by restricting system calls, reducing the attack surface if the container is compromised.
+          type: RuntimeDefault
+      containers:
+        - name: frontend
+          image: 395136123952.dkr.ecr.us-east-1.amazonaws.com/proshop-frontend:9b00be51b630240cf30ccf05e18e0599ca262c00 # prod: same URI, tag managed by CI/CD in Phase 4
+          securityContext:
+            allowPrivilegeEscalation: false
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m # prod: 100m
+              memory: 64Mi # prod: 128Mi
+            limits:
+              cpu: 200m # prod: 500m
+              memory: 256Mi # prod: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 3

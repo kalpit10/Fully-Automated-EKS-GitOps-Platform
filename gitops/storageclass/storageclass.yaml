@@ -1,0 +1,13 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true" # if gp3 is not mentioned, then it will be used as the default storage class for PVCs that do not specify a storage class.
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+reclaimPolicy: Retain # retain it even if the PVC is deleted, so that data is not lost
+volumeBindingMode: WaitForFirstConsumer # delay binding until a pod is scheduled, so that the volume is created in the same AZ as the pod
+allowVolumeExpansion: true

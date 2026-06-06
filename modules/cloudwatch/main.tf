@@ -89,19 +89,22 @@ locals {
         }
       },
 
-      # ROW 4 — ALB Request Count & Latency (SEARCH-based)
+      # ROW 4 — ALB Request Count & Response Time
+      # SEARCH scoped by MetricName so each panel shows exactly one metric.
+      # The stable substring "k8s-proshop" matches the LBC-generated ALB name
+      # regardless of the hash suffix that changes on every redeploy.
       {
         "type" : "metric",
         "x" : 0, "y" : 18,
         "width" : 12, "height" : 6,
         "properties" : {
-          "title" : "ALB Request Count (Dynamic)",
+          "title" : "ALB Request Count",
           "view" : "timeSeries",
           "metrics" : [
             [
               {
-                "expression" : "SEARCH('{AWS/ApplicationELB,LoadBalancer} \"${var.alb_name}\"', 'Sum', 300)",
-                "label" : "RequestCount (ALB Auto-Detected)",
+                "expression" : "SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"RequestCount\" \"${var.alb_name_prefix}\"', 'Sum', 60)",
+                "label" : "RequestCount",
                 "id" : "e1"
               }
             ]
@@ -114,13 +117,13 @@ locals {
         "x" : 12, "y" : 18,
         "width" : 12, "height" : 6,
         "properties" : {
-          "title" : "ALB Target Response Time (Dynamic)",
+          "title" : "ALB Target Response Time (avg seconds)",
           "view" : "timeSeries",
           "metrics" : [
             [
               {
-                "expression" : "SEARCH('{AWS/ApplicationELB,LoadBalancer} \"${var.alb_name}\"', 'Average', 300)",
-                "label" : "TargetResponseTime (ALB Auto-Detected)",
+                "expression" : "SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"TargetResponseTime\" \"${var.alb_name_prefix}\"', 'Average', 60)",
+                "label" : "TargetResponseTime",
                 "id" : "e2"
               }
             ]
@@ -129,7 +132,11 @@ locals {
         }
       },
 
-      # ROW 5 — ALB 4XX & 5XX Errors (also SEARCH-based)
+      # ROW 5 — ALB 4XX and 5XX Errors
+      # Each panel uses a different MetricName — this is what was missing before.
+      # HTTPCode_Target_4XX_Count and HTTPCode_Target_5XX_Count are distinct metrics
+      # in the AWS/ApplicationELB namespace. Without MetricName scoping, both panels
+      # run an identical SEARCH and show identical data.
       {
         "type" : "metric",
         "x" : 0, "y" : 24,
@@ -140,8 +147,8 @@ locals {
           "metrics" : [
             [
               {
-                "expression" : "SEARCH('{AWS/ApplicationELB,LoadBalancer} \"${var.alb_name}\"', 'Sum', 300)",
-                "label" : "HTTP 4XX (ALB Auto-Detected)",
+                "expression" : "SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"HTTPCode_Target_4XX_Count\" \"${var.alb_name_prefix}\"', 'Sum', 60)",
+                "label" : "HTTP 4XX Count",
                 "id" : "e3"
               }
             ]
@@ -159,8 +166,8 @@ locals {
           "metrics" : [
             [
               {
-                "expression" : "SEARCH('{AWS/ApplicationELB,LoadBalancer} \"${var.alb_name}\"', 'Sum', 300)",
-                "label" : "HTTP 5XX (ALB Auto-Detected)",
+                "expression" : "SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"HTTPCode_Target_5XX_Count\" \"${var.alb_name_prefix}\"', 'Sum', 60)",
+                "label" : "HTTP 5XX Count",
                 "id" : "e4"
               }
             ]
@@ -168,6 +175,7 @@ locals {
           "region" : var.region
         }
       }
+
     ]
   })
 }

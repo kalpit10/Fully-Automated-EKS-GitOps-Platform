@@ -1,0 +1,47 @@
+# We need to install the kube-prometheus-stack in order to monitor our Kubernetes cluster and applications. The kube-prometheus-stack is a collection of Kubernetes manifests, Grafana dashboards, and Prometheus rules that provide a complete monitoring solution for Kubernetes clusters. It includes Prometheus for metrics collection, Alertmanager for alerting, and Grafana for visualization. By installing the kube-prometheus-stack, we can gain insights into the performance and health of our cluster and applications, and we can also set up alerts to notify us of any issues that may arise.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # This tells us to ignore differences in the status field of the Prometheus and Alertmanager resources, which can help prevent unnecessary syncs and reduce the load on the Kubernetes API server.
+  ignoreDifferences:
+    - group: monitoring.coreos.com
+      kind: Prometheus
+      jqPathExpressions:
+        - .status.terminatingReplicas
+      jsonPointers:
+        - /status
+    - group: monitoring.coreos.com
+      kind: Alertmanager
+      jqPathExpressions:
+        - .status.terminatingReplicas
+      jsonPointers:
+        - /status
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: "70.4.2"
+      helm:
+        valueFiles:
+          - $values/gitops/monitoring/values-dev.yaml
+    - repoURL: https://github.com/kalpit10/cloud-native-ecommerce-platform.git
+      targetRevision: phase1-test
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true # This tells ArgoCD to use the Kubernetes API server to apply resources instead of storing everything in annotations, which bypasses the size limit entirely.
+      - RespectIgnoreDifferences=true # This tells ArgoCD to ignore differences between the live state and the desired state when it comes to resources that have been applied using Server-Side Apply, which can help prevent unnecessary syncs and reduce the load on the Kubernetes API server.

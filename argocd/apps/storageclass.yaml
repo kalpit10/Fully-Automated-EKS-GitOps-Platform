@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: storageclass
+  namespace: argocd
+  finalizers: # We are keeping this finalizer to prevent deletion of the application until we have a chance to clean up the resources it manages.
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kalpit10/cloud-native-ecommerce-platform.git
+    targetRevision: phase1-test
+    path: gitops/storageclass
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

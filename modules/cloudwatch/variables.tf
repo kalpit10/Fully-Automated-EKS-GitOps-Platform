@@ -19,7 +19,24 @@ variable "env" {
   type        = string
 }
 
-variable "alb_name" {
-  description = "Stable part of the ALB name or DNS used to search ALB metrics"
+variable "alb_name_prefix" {
+  description = "Stable substring of the LBC-generated ALB name used to scope CloudWatch dashboard SEARCH expressions. The LBC names ALBs as k8s-<namespace>-<ingress>-<hash>. Set to 'k8s-proshop' — stable across redeployments."
   type        = string
+}
+
+variable "notification_email" {
+  description = "Email address for CloudWatch Alarm SNS notifications. Must be confirmed via the subscription email AWS sends after terraform apply."
+  type        = string
+}
+
+variable "hpa_max_replicas" {
+  description = "Maximum replica count configured in the HPA for the proshop namespace. Used as the threshold for the HPA-at-max alarm."
+  type        = number
+  default     = 3
+}
+
+variable "create_alb_alarms" {
+  description = "Set to true only after the ALB exists (ArgoCD has synced the Ingress). Gates the data.aws_lb lookup and all three ALB-level alarms. Default false so standup and teardown full applies never evaluate the ALB data source."
+  type        = bool
+  default     = false
 }

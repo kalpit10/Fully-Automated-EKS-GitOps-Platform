@@ -1,0 +1,23 @@
+# This Argo CD Application manifest defines the root application for the GitOps setup. It points to the Git repository where the application manifests are stored and specifies how Argo CD should synchronize the state of the cluster with the desired state defined in Git.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default # The Argo CD project to which this application belongs
+  source:
+    repoURL: https://github.com/kalpit10/cloud-native-ecommerce-platform.git
+    targetRevision: phase1-test
+    path: argocd/apps
+  destination:
+    server: https://kubernetes.default.svc # This is how ArgoCD refers to the same cluster it's running in. It's the internal Kubernetes API server address.
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true # Automatically delete resources that are no longer defined in the Git repository
+      selfHeal: true # Automatically revert changes made to the cluster that deviate from the Git repository
+    syncOptions:
+      - CreateNamespace=true

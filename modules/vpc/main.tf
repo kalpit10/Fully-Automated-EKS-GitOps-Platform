@@ -6,9 +6,14 @@ resource "aws_vpc" "this" {
 
   tags = {
     Name    = "${var.name_prefix}-${var.env}-vpc"
-    Project = "Capstone"
+    Project = "proshop"
     Env     = var.env
     Owner   = "Team4"
+    # Required for LBC VPC auto-discovery.
+    # The LBC calls DescribeVPCs with this filter to find its VPC when
+    # vpcId is not set in the Helm values. Without this tag, the filter
+    # returns empty and the controller cannot start.
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   }
 }
 
@@ -20,14 +25,27 @@ resource "aws_subnet" "this" {
   cidr_block        = each.value.cidr
   availability_zone = each.value.az
 
-  # Only public subnets get public IPs on launch
   map_public_ip_on_launch = each.value.tier == "public" ? true : false
 
-  tags = {
-    Name = "${var.name_prefix}-${var.env}-${each.key}"
-    Tier = each.value.tier
-    Env  = var.env
-  }
+  tags = merge(
+    {
+      Name = "${var.name_prefix}-${var.env}-${each.key}"
+      Tier = each.value.tier
+      Env  = var.env
+    },
+    # Public subnets: tag for external (internet-facing) ALB placement.
+    # LBC reads this tag to determine which subnets to use for public ALBs.
+    each.value.tier == "public" ? {
+      "kubernetes.io/role/elb"                    = "1" # 1 means "true" for Kubernetes tags. This is required for external ALBs to work.
+      "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    } : {},
+    # Private-frontend subnets: tag for internal ALB placement.
+    # Also required for EKS node group subnet discovery.
+    each.value.tier == "private-frontend" ? {
+      "kubernetes.io/role/internal-elb"           = "1" # 1 means "true" for Kubernetes tags. This is required for internal ALBs to work.
+      "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+    } : {}
+  )
 }
 
 
@@ -37,7 +55,7 @@ resource "aws_internet_gateway" "this" {
 
   tags = {
     Name    = "${var.name_prefix}-${var.env}-igw"
-    Project = "Capstone"
+    Project = "proshop"
     Env     = var.env
     Owner   = "Team4"
   }
@@ -78,8 +96,9 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-########## NAT GATEWAYS ##########
-# Elastic IP for NAT Gateway
+########## NAT GATEWAY ##########
+# Kept for MongoDB Atlas outbound traffic only.
+# All AWS service traffic is handled by VPC endpoints below.
 resource "aws_eip" "nat" {
   domain = "vpc" # must be set for VPC NAT
 
@@ -185,17 +204,207 @@ resource "aws_security_group" "nodes" {
   }
 
 
-  # Outbound: allow internet (for Atlas, PayPal, npm, etc.)
+  ingress {
+    description = "Allow node to node communication"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    self        = true
+  }
+
   egress {
-    description = "Allow outbound HTTPS"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
+    description = "Allow all outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
     Name = "${var.name_prefix}-${var.env}-nodes-sg"
+    Env  = var.env
+  }
+}
+
+
+########## VPC ENDPOINTS SECURITY GROUP ##########
+resource "aws_security_group" "vpc_endpoints" {
+  name        = "${var.name_prefix}-${var.env}-vpce-sg"
+  description = "Allow HTTPS from nodes to VPC interface endpoints"
+  vpc_id      = aws_vpc.this.id
+
+  ingress {
+    description     = "HTTPS from node security group"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.nodes.id]
+  }
+
+  egress {
+    description = "Allow all outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-sg"
+    Env  = var.env
+  }
+}
+
+########## VPC ENDPOINTS ##########
+
+# --- S3 Gateway Endpoint (free) ---
+# ECR stores image layers in S3. Without this, every image pull
+# goes through the NAT Gateway and costs money per GB transferred.
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = aws_vpc.this.id
+  service_name      = "com.amazonaws.${var.region}.s3"
+  vpc_endpoint_type = "Gateway"
+
+  # Associate with both public and private route tables
+  # so all subnets can reach S3 without NAT.
+  route_table_ids = [
+    aws_route_table.public.id,
+    aws_route_table.private.id
+  ]
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-s3"
+    Env  = var.env
+  }
+}
+
+# --- ECR API Interface Endpoint ---
+# Handles Docker authentication and image manifest requests.
+resource "aws_vpc_endpoint" "ecr_api" {
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${var.region}.ecr.api"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  subnet_ids = [
+    for k, s in aws_subnet.this : s.id
+    if var.subnets[k].tier == "private-frontend"
+  ]
+
+  security_group_ids = [aws_security_group.vpc_endpoints.id]
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-ecr-api"
+    Env  = var.env
+  }
+}
+
+# --- ECR DKR Interface Endpoint ---
+# Handles the actual image layer downloads from ECR.
+resource "aws_vpc_endpoint" "ecr_dkr" {
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${var.region}.ecr.dkr"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  subnet_ids = [
+    for k, s in aws_subnet.this : s.id
+    if var.subnets[k].tier == "private-frontend"
+  ]
+
+  security_group_ids = [aws_security_group.vpc_endpoints.id]
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-ecr-dkr"
+    Env  = var.env
+  }
+}
+
+# --- Secrets Manager Interface Endpoint ---
+# Allows pods to read secrets without going through NAT Gateway.
+resource "aws_vpc_endpoint" "secretsmanager" {
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${var.region}.secretsmanager"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  # Only place endpoints in private-frontend subnets since backend subnets don't need them.
+  subnet_ids = [
+    for k, s in aws_subnet.this : s.id
+    if var.subnets[k].tier == "private-frontend"
+  ]
+
+  security_group_ids = [aws_security_group.vpc_endpoints.id]
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-secretsmanager"
+    Env  = var.env
+  }
+}
+
+# --- STS Interface Endpoint ---
+# Required for IRSA — pods exchange their Kubernetes token for
+# temporary AWS credentials via STS AssumeRoleWithWebIdentity.
+resource "aws_vpc_endpoint" "sts" {
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${var.region}.sts"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  subnet_ids = [
+    for k, s in aws_subnet.this : s.id
+    if var.subnets[k].tier == "private-frontend"
+  ]
+
+  security_group_ids = [aws_security_group.vpc_endpoints.id]
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-sts"
+    Env  = var.env
+  }
+}
+
+# --- CloudWatch Logs Interface Endpoint ---
+# Allows the CloudWatch agent on nodes to ship pod logs
+# directly to CloudWatch without crossing the NAT Gateway.
+resource "aws_vpc_endpoint" "cloudwatch_logs" {
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${var.region}.logs"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  subnet_ids = [
+    for k, s in aws_subnet.this : s.id
+    if var.subnets[k].tier == "private-frontend"
+  ]
+
+  security_group_ids = [aws_security_group.vpc_endpoints.id]
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-cloudwatch-logs"
+    Env  = var.env
+  }
+}
+
+# --- EKS Interface Endpoint ---
+# Required for nodes to reach the EKS API server privately.
+# Without this, node registration traffic goes through NAT Gateway
+# and can fail if there are any connectivity issues.
+resource "aws_vpc_endpoint" "eks" {
+  vpc_id              = aws_vpc.this.id
+  service_name        = "com.amazonaws.${var.region}.eks"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  subnet_ids = [
+    for k, s in aws_subnet.this : s.id
+    if var.subnets[k].tier == "private-frontend"
+  ]
+
+  security_group_ids = [aws_security_group.vpc_endpoints.id]
+
+  tags = {
+    Name = "${var.name_prefix}-${var.env}-vpce-eks"
     Env  = var.env
   }
 }

@@ -31,9 +31,3 @@ output "ecr_repo_urls" {
   description = "ECR repository URLs"
   sensitive   = true
 }
-
-output "aws_secret_backend_arn" {
-  value       = module.secrets.backend_secret_arn
-  description = "ARN of the backend secrets in AWS Secrets Manager"
-  sensitive   = true
-}

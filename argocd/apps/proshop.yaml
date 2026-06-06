@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: proshop
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kalpit10/cloud-native-ecommerce-platform.git
+    targetRevision: phase1-test # prod: main
+    path: gitops/proshop
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: proshop
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    managedNamespaceMetadata:
+      labels:
+        app.kubernetes.io/managed-by: argocd
+        app.kubernetes.io/part-of: proshop
+        environment: dev # prod: prod
+        pod-security.kubernetes.io/enforce: baseline
+        pod-security.kubernetes.io/audit: baseline
+        pod-security.kubernetes.io/warn: baseline
+      annotations:
+        argocd.argoproj.io/managed-by: argocd

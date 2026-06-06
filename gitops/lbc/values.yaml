@@ -1,0 +1,21 @@
+clusterName: "proshop-eks-dev"
+
+serviceAccount:
+  create: true
+  name: "aws-load-balancer-controller"
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::395136123952:role/proshop-eks-dev-alb-controller-role"
+
+region: us-east-1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+replicaCount: 2
+
+logLevel: info

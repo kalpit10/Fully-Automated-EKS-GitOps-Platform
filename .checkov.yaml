@@ -49,3 +49,6 @@ skip-check:
   # CKV_K8S_30: runAsNonRoot not set at container level.
   # Same reason as above.
   - CKV_K8S_30
+
+  - CKV_SECRET_6 # Base64 High Entropy String: false positives on Helm values and ESO manifests
+  - CKV_AWS_25 # Security group egress 0.0.0.0/0: intentional for EKS worker nodes

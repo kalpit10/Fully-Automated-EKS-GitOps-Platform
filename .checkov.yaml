@@ -52,3 +52,5 @@ skip-check:
 
   - CKV_SECRET_6 # Base64 High Entropy String: false positives on Helm values and ESO manifests
   - CKV_AWS_25 # Security group egress 0.0.0.0/0: intentional for EKS worker nodes
+  - CKV_AWS_277 # Security group egress 0.0.0.0/0 port -1: intentional for EKS worker nodes outbound
+

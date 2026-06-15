@@ -1,4 +1,4 @@
-# Cloud-Native E-Commerce Platform on AWS EKS
+# Fully Automated EKS GitOps Platform on AWS
 
 A production-style deployment of the ProShop v2 MERN e-commerce application on AWS Elastic
 Kubernetes Service, built with GitOps, automated CI/CD pipelines, secrets management,
